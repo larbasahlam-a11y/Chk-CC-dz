@@ -126,8 +126,4 @@ PAYMENTS_AI_ORG = "79e29172-59dd-4f18-82d6-28758d4a89fa"
 STRIPE_EZY_KEY = "pk_live_51NMHTlLvIw0k1EPu80ivQ0HYQ9NUotEncPEpUYYytP8YkUPB4vNGYICv1rB5Emf6nD1UzKXd0wKzdXnumGJqYPDt00Huwrpsfq"
 BRAINTREE_DNA_URL = "https://www.dnalasering.com/my-account/"
 PAYPAL_BRASS_URL = "https://www.brasscheck.com/video/donate/"
-'''
 
-with open('/mnt/agents/output/config.py', 'w', encoding='utf-8') as f:
-    f.write(config_code)
-print("✅ config.py v10.0 تم إنشاؤه بنجاح")
