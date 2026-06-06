@@ -1,4 +1,4 @@
-# ==================== bot.py ====================
+# ==================== bot.py - FULL WITH FONT ====================
 
 import telebot
 import time, threading, random, re
@@ -93,8 +93,8 @@ def handle_start(message):
     
     markup = InlineKeyboardMarkup(row_width=1)
     markup.add(InlineKeyboardButton("〔  𝗧𝗼𝗼𝗹𝘀 〕", callback_data="menu_tools", icon_custom_emoji_id=eid('tools'), style="primary"))
-    markup.add(InlineKeyboardButton("〔 𝗣𝗿𝗼𝘅𝘆 〕", callback_data="menu_proxy", icon_custom_emoji_id=eid('proxy'), style="success"))
-    markup.add(InlineKeyboardButton("〔 𝗗𝗲𝘃 〕", callback_data="menu_dev", icon_custom_emoji_id=eid('developer'), style="danger"))
+    markup.add(InlineKeyboardButton("〔  𝗣𝗿𝗼𝘅𝘆 〕", callback_data="menu_proxy", icon_custom_emoji_id=eid('proxy'), style="success"))
+    markup.add(InlineKeyboardButton("〔  𝗗𝗲𝘃 〕", callback_data="menu_dev", icon_custom_emoji_id=eid('developer'), style="danger"))
     markup.add(InlineKeyboardButton("〔  𝗣𝗿𝗼𝗳𝗶𝗹𝗲 〕", callback_data="menu_profile", icon_custom_emoji_id=eid('profile_icon'), style="primary"))
     
     text = f"""<blockquote><b>✦ 𝐖𝐄𝐋𝐂𝐎𝐌𝐄 {name} 𝐓𝐎 𝐏𝐑𝐎𝐅𝐄𝐒𝐎𝐑 𝐂𝐇𝐄𝐂𝐊𝐄𝐑 ✦</b></blockquote>
@@ -123,7 +123,7 @@ def menu_tools(call):
     )
     markup.add(InlineKeyboardButton("〔  𝗖𝗼𝗺𝗯𝗼 𝗖𝗵𝗲𝗰𝗸 〕", callback_data="check_combo", icon_custom_emoji_id=eid('combo_card'), style="success"))
     markup.add(InlineKeyboardButton("〔  𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀 〕", callback_data="menu_commands", icon_custom_emoji_id=eid('code'), style="primary"))
-    markup.add(InlineKeyboardButton("〔 🔙 𝗕𝗮𝗰𝗸 〕", callback_data="menu_back", icon_custom_emoji_id=eid('back_icon'), style="danger"))
+    markup.add(InlineKeyboardButton("〔  𝗕𝗮𝗰𝗸 〕", callback_data="menu_back", icon_custom_emoji_id=eid('back_icon'), style="danger"))
     
     text = f"<b>{em('tools')} 𝗧𝗢𝗢𝗟𝗦 𝗠𝗘𝗡𝗨\n━━━━━━━━━━━━━━━━━━━━━━━━\n{em('choose')} 𝗦𝗲𝗹𝗲𝗰𝘁 𝗮 𝗴𝗮𝘁𝗲𝘄𝗮𝘆 𝘁𝗼 𝗰𝗵𝗲𝗰𝗸 𝗰𝗮𝗿𝗱</b>"
     bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=text, reply_markup=markup, parse_mode="HTML")
@@ -187,9 +187,9 @@ def menu_dev(call):
     markup = InlineKeyboardMarkup()
     markup.add(InlineKeyboardButton("〔  𝗖𝗼𝗻𝘁𝗮𝗰𝘁 𝗗𝗲𝘃 〕", url=f"https://t.me/{DEVELOPER_USERNAME.replace('@','')}", icon_custom_emoji_id=eid('developer'), style="primary"))
     if call.from_user.id == ADMIN_ID:
-        markup.add(InlineKeyboardButton("〔  𝗕𝗿𝗼𝗮𝗱𝗰𝗮𝘀𝘁 〕", callback_data="admin_broadcast", icon_custom_emoji_id=eid('proxy'), style="success"))
+        markup.add(InlineKeyboardButton("〔 𝗕𝗿𝗼𝗮𝗱𝗰𝗮𝘀𝘁 〕", callback_data="admin_broadcast", icon_custom_emoji_id=eid('proxy'), style="success"))
         markup.add(InlineKeyboardButton("〔  𝗔𝗱𝗺𝗶𝗻 〕", callback_data="admin_menu", icon_custom_emoji_id=eid('admin_icon'), style="danger"))
-    markup.add(InlineKeyboardButton("〔 🔙 𝗕𝗮𝗰𝗸 〕", callback_data="menu_back", icon_custom_emoji_id=eid('back_icon'), style="danger"))
+    markup.add(InlineKeyboardButton("〔  𝗕𝗮𝗰𝗸 〕", callback_data="menu_back", icon_custom_emoji_id=eid('back_icon'), style="danger"))
     bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
         text=f"<b>{em('developer')} 𝗗𝗘𝗩 𝗠𝗘𝗡𝗨\n━━━━━━━━━━━━━━━━━━━━━━━━\n{em('skull')} {DEVELOPER_USERNAME}</b>", reply_markup=markup, parse_mode="HTML")
 
@@ -198,7 +198,7 @@ def admin_menu_callback(call):
     if call.from_user.id != ADMIN_ID: return
     bot.answer_callback_query(call.id)
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("〔 𝗦𝘁𝗮𝘁𝘀 〕", callback_data="admin_stats", icon_custom_emoji_id=eid('stats'), style="primary"))
+    markup.add(InlineKeyboardButton("〔  𝗦𝘁𝗮𝘁𝘀 〕", callback_data="admin_stats", icon_custom_emoji_id=eid('stats'), style="primary"))
     markup.add(InlineKeyboardButton("〔  𝗖𝗿𝗲𝗮𝘁𝗲 𝗖𝗼𝗱𝗲 〕", callback_data="admin_create_code", icon_custom_emoji_id=eid('code'), style="success"))
     markup.add(InlineKeyboardButton("〔  𝗕𝗮𝗻 𝗨𝘀𝗲𝗿 〕", callback_data="admin_ban_menu", icon_custom_emoji_id=eid('declined'), style="danger"))
     markup.add(InlineKeyboardButton("〔  𝗕𝗮𝗰𝗸 〕", callback_data="menu_dev", icon_custom_emoji_id=eid('back_icon'), style="danger"))
@@ -237,7 +237,7 @@ def menu_back(call):
     markup.add(InlineKeyboardButton("〔  𝗧𝗼𝗼𝗹𝘀 〕", callback_data="menu_tools", icon_custom_emoji_id=eid('tools'), style="primary"))
     markup.add(InlineKeyboardButton("〔  𝗣𝗿𝗼𝘅𝘆 〕", callback_data="menu_proxy", icon_custom_emoji_id=eid('proxy'), style="success"))
     markup.add(InlineKeyboardButton("〔  𝗗𝗲𝘃 〕", callback_data="menu_dev", icon_custom_emoji_id=eid('developer'), style="danger"))
-    markup.add(InlineKeyboardButton("〔 𝗣𝗿𝗼𝗳𝗶𝗹𝗲 〕", callback_data="menu_profile", icon_custom_emoji_id=eid('profile_icon'), style="primary"))
+    markup.add(InlineKeyboardButton("〔  𝗣𝗿𝗼𝗳𝗶𝗹𝗲 〕", callback_data="menu_profile", icon_custom_emoji_id=eid('profile_icon'), style="primary"))
     
     text = f"""<blockquote><b>✦ 𝐖𝐄𝐋𝐂𝐎𝐌𝐄 {name} 𝐓𝐎 𝐏𝐑𝐎𝐅𝐄𝐒𝐎𝐑 𝐂𝐇𝐄𝐂𝐊𝐄𝐑 ✦</b></blockquote>
 
@@ -446,34 +446,69 @@ def combo_processing(call):
         'combo_bt': ('𝘽𝙧𝙖𝙞𝙣𝙩𝙧𝙚𝙚', xst_bt_dna),
         'combo_paypal': ('𝐏𝐚𝐲𝐏𝐚𝐥', xst_paypal_brass)
     }
-    if call.data == 'combo_cancel': bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"<b>{em('declined')} 𝗖𝗮𝗻𝗰𝗲𝗹𝗹𝗲𝗱.</b>", parse_mode="HTML"); return
-    gateway, func = gateways[call.data]; user_id = str(call.from_user.id); filename = f"com{user_id}.txt"
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"<b>{em('speed')} 𝗣𝗿𝗼𝗰𝗲𝘀𝘀𝗶𝗻𝗴 {gateway}...</b>", parse_mode="HTML")
+    if call.data == 'combo_cancel':
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id,
+            text=f"<b>{em('declined')} 𝗖𝗮𝗻𝗰𝗲𝗹𝗹𝗲𝗱.</b>", parse_mode="HTML")
+        return
+    
+    gateway, func = gateways[call.data]
+    user_id = str(call.from_user.id)
+    filename = f"com{user_id}.txt"
+    
     def process():
         charged, funds, ccn, declined, errors = 0, 0, 0, 0, 0
         with open(filename, 'r') as file:
-            lines = file.readlines(); total = len(lines)
-            progress_msg = bot.send_message(call.from_user.id, f"<b>{em('funds')} {gateway}: 0/{total}</b>", parse_mode="HTML")
+            lines = file.readlines()
+            total = len(lines)
+            
+            result_markup = InlineKeyboardMarkup(row_width=4)
+            result_markup.add(
+                InlineKeyboardButton(f"✅ {charged}", callback_data="noop", style="success"),
+                InlineKeyboardButton(f"💳 {ccn}", callback_data="noop", style="primary"),
+                InlineKeyboardButton(f"❌ {declined}", callback_data="noop", style="danger"),
+                InlineKeyboardButton(f"⚠️ {errors}", callback_data="noop", style="danger")
+            )
+            
+            progress_msg = bot.send_message(call.from_user.id,
+                f"<b>{em('speed')} 𝗣𝗿𝗼𝗰𝗲𝘀𝘀𝗶𝗻𝗴 {gateway}... 0/{total}</b>",
+                reply_markup=result_markup, parse_mode="HTML")
+            
             for i, cc in enumerate(lines, 1):
                 cc = cc.strip()
                 try: result = str(func(cc))
                 except: result = "𝗘𝗥𝗥𝗢𝗥"; errors += 1
+                
                 if any(x in result for x in ['CHARGE', 'APPROVED', 'succeeded', 'accessToken']): charged += 1
                 elif any(x in result for x in ['insufficient', 'Funds', 'INSUFFICIENT']): funds += 1
                 elif any(x in result for x in ['security', 'CCN', 'INVALID_SECURITY_CODE']): ccn += 1
                 elif any(x in result for x in ['Error', 'Failed', 'Down', 'Risk']): errors += 1
                 else: declined += 1
+                
                 if i % 5 == 0 or i == total:
-                    try: bot.edit_message_text(chat_id=call.from_user.id, message_id=progress_msg.message_id, text=f"<b>{em('funds')} {gateway}: {i}/{total}\n{em('charged')} 𝗖𝗵𝗮𝗿𝗴𝗲𝗱: {charged}\n{em('funds')} 𝗙𝘂𝗻𝗱𝘀: {funds}\n{em('ccn')} 𝗖𝗖𝗡: {ccn}\n{em('declined')} 𝗗𝗲𝗰𝗹𝗶𝗻𝗲𝗱: {declined}\n{em('error')} 𝗘𝗿𝗿𝗼𝗿𝘀: {errors}</b>", parse_mode="HTML")
+                    result_markup = InlineKeyboardMarkup(row_width=4)
+                    result_markup.add(
+                        InlineKeyboardButton(f" {charged}", callback_data="noop", style="success"),
+                        InlineKeyboardButton(f" {ccn}", callback_data="noop", style="primary"),
+                        InlineKeyboardButton(f" {declined}", callback_data="noop", style="danger"),
+                        InlineKeyboardButton(f" {errors}", callback_data="noop", style="danger")
+                    )
+                    try:
+                        bot.edit_message_text(
+                            chat_id=call.from_user.id, message_id=progress_msg.message_id,
+                            text=f"<b>{em('speed')} 𝗣𝗿𝗼𝗰𝗲𝘀𝘀𝗶𝗻𝗴 {gateway}... {i}/{total}</b>",
+                            reply_markup=result_markup, parse_mode="HTML")
                     except: pass
                 time.sleep(9)
-        result_markup = InlineKeyboardMarkup(row_width=3)
+        
+        result_markup = InlineKeyboardMarkup(row_width=4)
         result_markup.add(
-            InlineKeyboardButton(f" 𝗟𝗜𝗩𝗘: {charged+funds+ccn}", callback_data="noop", icon_custom_emoji_id=eid('live_icon'), style="success"),
-            InlineKeyboardButton(f" 𝗖𝗛𝗔𝗥𝗚𝗘𝗗: {charged}", callback_data="noop", icon_custom_emoji_id=eid('charge_icon'), style="primary"),
-            InlineKeyboardButton(f" 𝗗𝗘𝗖𝗟𝗜𝗡𝗘𝗗: {declined+errors}", callback_data="noop", icon_custom_emoji_id=eid('decline_icon'), style="danger")
+            InlineKeyboardButton(f" {charged+funds+ccn}", callback_data="noop", style="success"),
+            InlineKeyboardButton(f" {ccn}", callback_data="noop", style="primary"),
+            InlineKeyboardButton(f" {declined}", callback_data="noop", style="danger"),
+            InlineKeyboardButton(f"⚠️ {errors}", callback_data="noop", style="danger")
         )
-        bot.send_message(call.from_user.id, f"""<strong>{em('charged')} 𝗖𝗢𝗠𝗕𝗢 𝗥𝗘𝗦𝗨𝗟𝗧𝗦
+        bot.send_message(call.from_user.id,
+            f"""<strong>{em('charged')} 𝗖𝗢𝗠𝗕𝗢 𝗥𝗘𝗦𝗨𝗟𝗧𝗦
 ━━━━━━━━━━━━━━━━━━━━━━━━
 {em('gateway')} 𝗚𝗔𝗧𝗘𝗪𝗔𝗬 ➛ {gateway}
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -484,7 +519,9 @@ def combo_processing(call):
 {em('error')} 𝗘𝗥𝗥𝗢𝗥𝗦 ➛ {errors}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 {em('funds')} 𝗧𝗢𝗧𝗔𝗟 ➛ {charged+funds+ccn+declined+errors}/{total}
-{em('skull')} 𝗕𝘆: {BOT_NAME}</strong>""", reply_markup=result_markup, parse_mode="HTML")
+{em('skull')} 𝗕𝘆: {BOT_NAME}</strong>""",
+            reply_markup=result_markup, parse_mode="HTML")
+    
     threading.Thread(target=process).start()
 
 @bot.message_handler(commands=["dev"])
