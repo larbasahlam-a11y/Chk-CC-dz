@@ -1,4 +1,4 @@
-'#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # Mo.dark جاهز 🕷️☠️
 # Profesor Checker v10.0 ULTIMATE
