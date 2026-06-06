@@ -1,0 +1,4 @@
+pyTelegramBotAPI==4.14.0
+requests==2.31.0
+user-agent==0.1.0
+faker==22.0.0
