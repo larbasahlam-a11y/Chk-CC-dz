@@ -206,8 +206,3 @@ def xst_paypal_brass(P):
         elif 'RISK_DISALLOWED' in text: return 'Risk Disallowed'
         else: return 'Declined'
     except: return 'PayPal API Failed'
-'''
-
-with open('/mnt/agents/output/gateways.py', 'w', encoding='utf-8') as f:
-    f.write(gateways_code)
-print("✅ gateways.py v10.0 تم إنشاؤه بنجاح")
