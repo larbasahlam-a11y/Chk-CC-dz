@@ -1,4 +1,4 @@
-'# ==================== config.py v10.0 ULTIMATE ====================
+# ==================== config.py v10.0 ULTIMATE ====================
 
 TOKEN = '8250378472:AAFH_JgQVbOUnCUvYQaOnLMnrWi4G_MCDZY'
 ADMIN_ID = 6936293942
