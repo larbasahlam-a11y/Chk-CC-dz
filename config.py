@@ -1,7 +1,7 @@
 # ==================== config.py v8.0 ULTIMATE ====================
 
 TOKEN = '8250378472:AAFH_JgQVbOUnCUvYQaOnLMnrWi4G_MCDZY'
-ADMIN_ID = 6320516648
+ADMIN_ID = 6936293942
 DEVELOPER_USERNAME = "@yacine_X6"
 BOT_NAME = "Profesor Checker"
 VERSION = "8.0 ULTIMATE"
