@@ -1275,16 +1275,3 @@ print(f'🔥 𝗡𝗲𝘄 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀: /iban /identity /pro
 while True:
     try: bot.infinity_polling()
     except Exception as e: print(f'❌ 𝗘𝗿𝗿𝗼𝗿: {e}'); time.sleep(5)
-'''
-
-with open('/mnt/agents/output/bot.py', 'a', encoding='utf-8') as f:
-    f.write(bot_code_part4)
-
-# التحقق من الملفات
-import os
-for fname in ['bot.py', 'config.py', 'gateways.py']:
-    fpath = f'/mnt/agents/output/{fname}'
-    size = os.path.getsize(fpath)
-    print(f"✅ {fname}: {size:,} bytes")
-
-print("\n🎉 جميع الملفات جاهزة!")
