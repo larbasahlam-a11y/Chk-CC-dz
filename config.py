@@ -1,19 +1,22 @@
-# ==================== config.py v10.0 ULTIMATE ====================
+# ==================== config.py v11.0 ULTIMATE ====================
+# Mo.dark Engineering v7.0 - UESM Mode
+# Profesor Checker v11.0 - Rebuilt from scratch
+
+# ═══════════════════════════════════════════════════════════════
+# CORE CONFIGURATION
+# ═══════════════════════════════════════════════════════════════
 
 TOKEN = '8250378472:AAFH_JgQVbOUnCUvYQaOnLMnrWi4G_MCDZY'
 ADMIN_ID = 6936293942
 DEVELOPER_USERNAME = "@yacine_X6"
 BOT_NAME = "Profesor Checker"
-VERSION = "10.0 ULTIMATE"
+VERSION = "11.0 ULTIMATE"
 
-# صورة التصميم
 BANNER_URL = "https://i.ibb.co/Xr5tTqz6/1780729324300.jpg"
 
 # ═══════════════════════════════════════════════════════════════
-# نظام الدفع بالنجوم (Telegram Stars) - حقيقي
+# نظام الدفع بالنجوم (Telegram Stars)
 # ═══════════════════════════════════════════════════════════════
-# ملاحظة: يجب تفعيل Payments في @BotFather
-# Bot Settings -> Payments -> Telegram Stars
 
 STARS_PRICES = {
     'day':    {'price': 1,    'days': 1,   'label': 'يوم واحد',    'desc': 'اشتراك يوم كامل'},
@@ -23,6 +26,78 @@ STARS_PRICES = {
     '6months':{'price': 70,   'days': 180, 'label': '6 أشهر',      'desc': 'اشتراك 6 أشهر'},
     'year':   {'price': 120,  'days': 365, 'label': 'سنة',         'desc': 'اشتراك سنة كاملة'},
 }
+
+# ═══════════════════════════════════════════════════════════════
+# GATEWAY CONFIGURATION
+# ═══════════════════════════════════════════════════════════════
+
+GATEWAYS = {
+    'stripe': {
+        'name': 'Stripe 0.00$',
+        'command': '/st',
+        'emoji': 'stripe',
+        'type': 'Auth',
+        'price': '$0.00',
+        'color': '🔥',
+    },
+    'paymentsai': {
+        'name': 'Payments.AI',
+        'command': '/pa',
+        'emoji': 'paymentsai',
+        'type': 'Charge',
+        'price': '$0.00',
+        'color': '💎',
+    },
+    'braintree': {
+        'name': 'Braintree',
+        'command': '/bt',
+        'emoji': 'braintree',
+        'type': 'Auth',
+        'price': '$0.00',
+        'color': '💜',
+    },
+    'paypal': {
+        'name': 'PayPal 7$',
+        'command': '/pp',
+        'emoji': 'paypal',
+        'type': 'Charge',
+        'price': '$7.00',
+        'color': '🚀',
+    },
+}
+
+# ═══════════════════════════════════════════════════════════════
+# MASS CHECK CONFIGURATION
+# ═══════════════════════════════════════════════════════════════
+
+MASS_CONFIG = {
+    'free_max_cards': 5,
+    'premium_max_cards': 150,
+    'delay_between_cards': 2.5,
+    'batch_size': 10,
+    'timeout_per_card': 25,
+    'show_progress_every': 5,
+}
+
+# ═══════════════════════════════════════════════════════════════
+# RESPONSE STATUS MAPPING
+# ═══════════════════════════════════════════════════════════════
+
+STATUS_MAP = {
+    'APPROVED': {'emoji': 'charged', 'text': 'APPROVED', 'color': '✅'},
+    'CHARGED': {'emoji': 'charged', 'text': 'CHARGED', 'color': '🔥'},
+    'CCN': {'emoji': 'ccn', 'text': 'CCN', 'color': '⚠️'},
+    'DECLINED': {'emoji': 'declined', 'text': 'DECLINED', 'color': '❌'},
+    'INSUFFICIENT': {'emoji': 'funds', 'text': 'INSUFFICIENT', 'color': '💰'},
+    '3DSECURE': {'emoji': 'warning', 'text': '3D SECURE', 'color': '🔐'},
+    'RISK': {'emoji': 'error', 'text': 'RISK', 'color': '🚫'},
+    'LIVE': {'emoji': 'live_icon', 'text': 'LIVE', 'color': '🟢'},
+    'DEAD': {'emoji': 'declined', 'text': 'DEAD', 'color': '❌'},
+}
+
+# ═══════════════════════════════════════════════════════════════
+# EMOJI SYSTEM - Custom Telegram Emoji IDs
+# ═══════════════════════════════════════════════════════════════
 
 EMOJI = {
     'stripe': '5980995951160987855', 'stripe2': '5980995951160987855',
@@ -120,10 +195,9 @@ def em(key):
 
 def eid(key): return EMOJI.get(key, '')
 
-# ==================== البوابات ====================
+# ==================== GATEWAY KEYS ====================
 PAYMENTS_AI_KEY = "pk_live_oSLT21YBfpfTp6TqUF5JCZX4vxMenFyjAAjUiso"
 PAYMENTS_AI_ORG = "79e29172-59dd-4f18-82d6-28758d4a89fa"
 STRIPE_EZY_KEY = "pk_live_51NMHTlLvIw0k1EPu80ivQ0HYQ9NUotEncPEpUYYytP8YkUPB4vNGYICv1rB5Emf6nD1UzKXd0wKzdXnumGJqYPDt00Huwrpsfq"
 BRAINTREE_DNA_URL = "https://www.dnalasering.com/my-account/"
 PAYPAL_BRASS_URL = "https://www.brasscheck.com/video/donate/"
-
