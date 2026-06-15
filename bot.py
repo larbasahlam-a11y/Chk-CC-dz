@@ -9,17 +9,8 @@ from datetime import datetime
 from io import BytesIO
 
 import requests
-from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
-)
-from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters
-)
-
-# ════════════════════════════════════════════════════════════
-# CONFIG EMBEDDED
-# ════════════════════════════════════════════════════════════
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 BOT_TOKEN = "8250378472:AAFH_JgQVbOUnCUvYQaOnLMnrWi4G_MCDZY"
 ADMIN_ID = 6936293942
@@ -34,7 +25,6 @@ USER_AGENT = (
     "Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0"
 )
 
-# Font System - 𝗙𝗲𝗲𝗱𝗯𝗮𝗰𝗸
 FONT_MAP = {
     'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲',
     'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '𝗶', 'j': '𝗷',
@@ -53,11 +43,10 @@ FONT_MAP = {
 }
 
 def fb(text):
-    """Convert text to 𝗙𝗲𝗲𝗱𝗯𝗮𝗰𝗸 font"""
     return "".join(FONT_MAP.get(ch, ch) for ch in text)
 
-# User Data Storage
 user_db = {}
+stop_check = False
 
 def get_user(user_id):
     if user_id not in user_db:
@@ -68,7 +57,17 @@ def get_user(user_id):
         }
     return user_db[user_id]
 
-# Gateway Management
+def stop_all_checks():
+    global stop_check
+    stop_check = True
+
+def reset_stop():
+    global stop_check
+    stop_check = False
+
+def is_stopped():
+    return stop_check
+
 gateways = {
     "stripe": {
         "name": "Stripe", "url": DEFAULT_BUY_URL,
@@ -90,7 +89,6 @@ def remove_gateway(name):
         return True
     return False
 
-# Proxy Management
 proxies = []
 
 def add_proxy(proxy_str):
@@ -106,7 +104,6 @@ def get_proxy():
         return {"http": proxies[0], "https": proxies[0]}
     return None
 
-# Redeem Keys
 redeem_keys = {
     "PREMIUM-2026-ALPHA": {"plan": "Premium", "days": 30},
     "VIP-2026-OMEGA": {"plan": "VIP", "days": 90},
@@ -121,7 +118,6 @@ def redeem_key(key, user_id):
         return plan
     return None
 
-# Site Management
 monitored_sites = []
 
 def add_site(url):
@@ -136,34 +132,13 @@ def remove_site(url):
         return True
     return False
 
-# Mass Check Control
-stop_check = False
-
-def stop_all_checks():
-    global stop_check
-    stop_check = True
-
-def reset_stop():
-    global stop_check
-    stop_check = False
-
-def is_stopped():
-    return stop_check
-
-
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-
-# ════════════════════════════════════════════════════════════
-# COLORED BUTTONS VIA REQUESTS (Telegram API 9.4)
-# ════════════════════════════════════════════════════════════
-
 def send_colored_buttons(chat_id, text, buttons, parse_mode="HTML"):
-    """Send message with colored buttons using raw API"""
     keyboard = {"inline_keyboard": []}
     for row in buttons:
         keyboard_row = []
@@ -188,7 +163,6 @@ def send_colored_buttons(chat_id, text, buttons, parse_mode="HTML"):
         return None
 
 def edit_colored_buttons(chat_id, message_id, text, buttons, parse_mode="HTML"):
-    """Edit message with colored buttons using raw API"""
     keyboard = {"inline_keyboard": []}
     for row in buttons:
         keyboard_row = []
@@ -213,8 +187,6 @@ def edit_colored_buttons(chat_id, message_id, text, buttons, parse_mode="HTML"):
         logger.error(f"Failed to edit colored buttons: {e}")
         return None
 
-
-# Button builders with colors
 def b(text, callback, style="primary"):
     return {"text": text, "callback": callback, "style": style}
 
@@ -226,11 +198,6 @@ def b_green(text, callback):
 
 def b_blue(text, callback):
     return {"text": text, "callback": callback, "style": "primary"}
-
-
-# ════════════════════════════════════════════════════════════
-# CARD ENGINE
-# ════════════════════════════════════════════════════════════
 
 class CardEngine:
     def _rand_id(self, k=32):
@@ -408,13 +375,7 @@ class CardEngine:
         if data.get("status") in ("succeeded", "complete"): return card_str, True, "CHARGED", True
         return card_str, False, "Unknown response", False
 
-
 engine = CardEngine()
-
-
-# ════════════════════════════════════════════════════════════
-# BIN LOOKUP & CARD GENERATOR
-# ════════════════════════════════════════════════════════════
 
 def bin_lookup(bin_num):
     try:
@@ -447,11 +408,6 @@ def gen_card_from_bin(bin_prefix, count=10):
             if luhn_check(test): results.append(test); break
     return results
 
-
-# ════════════════════════════════════════════════════════════
-# UI BUILDERS - Colored Buttons
-# ════════════════════════════════════════════════════════════
-
 def build_main_menu():
     return [
         [b_blue(fb("Tools"), "tools")],
@@ -459,7 +415,6 @@ def build_main_menu():
         [b_blue(fb("Settings"), "settings")],
         [b_blue(fb("About"), "about")],
     ]
-
 
 def build_tools_menu():
     return [
@@ -470,7 +425,6 @@ def build_tools_menu():
         [b_blue(fb("Back"), "menu")],
     ]
 
-
 def build_mass_stats_buttons(approved, secure3d, declined):
     return [
         [b_green(fb(f"Approved {approved}"), "stats_approved")],
@@ -479,7 +433,6 @@ def build_mass_stats_buttons(approved, secure3d, declined):
         [b_red(fb("Stop"), "mass_stop")],
     ]
 
-
 def build_mass_done_buttons(approved, secure3d, declined):
     return [
         [b_green(fb(f"Approved {approved}"), "done_approved")],
@@ -487,7 +440,6 @@ def build_mass_done_buttons(approved, secure3d, declined):
         [b_red(fb(f"Declined {declined}"), "done_declined")],
         [b_blue(fb("Back"), "menu")],
     ]
-
 
 def build_settings_menu():
     return [
@@ -498,11 +450,6 @@ def build_settings_menu():
         [b_blue(fb("Other"), "gw_other")],
         [b_blue(fb("Back"), "menu")],
     ]
-
-
-# ════════════════════════════════════════════════════════════
-# /START COMMAND
-# ════════════════════════════════════════════════════════════
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -520,11 +467,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 {fb('Use the buttons below to navigate.')}"""
 
     send_colored_buttons(update.effective_chat.id, text, build_main_menu())
-
-
-# ════════════════════════════════════════════════════════════
-# CALLBACK HANDLER
-# ════════════════════════════════════════════════════════════
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -606,14 +548,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         send_colored_buttons(chat_id, text, build_settings_menu())
 
     elif data == "about":
-        text = f"""{fb('Mo.dark Card Checker v7.0')}
+        text = f"""{fb('yacinedev Card Checker v7.0')}
 
 ├─ {fb('Engine')}: Stripe Payment Link Engine
 ├─ {fb('Version')}: 7.0 ALPHA
 ├─ {fb('Performance')}: Async | Multi-threading
 ├─ {fb('Security')}: Proxy Rotation | Session Pool
 │
-├─ {fb('Developer')}: Mo.dark Engineering
+├─ {fb('Developer')}: yacinedev
 ├─ {fb('License')}: ALPHA_ENGINEER
 │
 └─ {fb('Built with precision. Engineered for dominance.')}"""
@@ -642,8 +584,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 {fb('One card per line.')}
 
 ├─ {fb('Format:')} <code>cc|mm|yyyy|cvv</code>
-├─ {fb('Max 50 cards for free users.')}
-└─ {fb('Unlimited for admin.')}"""
+├─ {fb('Unlimited for all users.')}"""
         buttons = [[b_blue(fb("Back"), "tools")]]
         send_colored_buttons(chat_id, text, buttons)
         context.user_data["state"] = "mass"
@@ -736,11 +677,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("stats_") or data.startswith("done_"):
         await query.answer(fb("Stats updated!"), show_alert=False)
 
-
-# ════════════════════════════════════════════════════════════
-# COMMANDS
-# ════════════════════════════════════════════════════════════
-
 async def cmd_chk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     udata = get_user(user_id)
@@ -758,7 +694,6 @@ async def cmd_chk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         card_str, success, msg, charged = engine.check(card)
         udata["checks"] += 1
 
-        # Get BIN info for the output
         bin_info = bin_lookup(card['number'])
         bin_scheme = bin_info['scheme'] if bin_info else "Unknown"
         bin_type = bin_info['type'] if bin_info else "Unknown"
@@ -767,7 +702,6 @@ async def cmd_chk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bin_bank = bin_info['bank'] if bin_info else "Unknown"
         bin_emoji = bin_info['emoji'] if bin_info else ""
 
-        # Profesor Checker style output
         if success:
             udata["charged"] += 1
             status_text = "CHARGED!"
@@ -786,7 +720,6 @@ async def cmd_chk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         udata["history"].append({"card": card_str, "result": msg, "success": success, "time": datetime.now().strftime("%H:%M:%S")})
 
-        # Profesor Checker style output
         output = f"""{status_icon} Gateway: Stripe Payment Link [ /chk ]
 -------------------------------
 {status_icon} Card: <code>{card_str}</code>
@@ -799,7 +732,7 @@ async def cmd_chk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 -------------------------------
 {status_icon} Time: {datetime.now().strftime('%H:%M:%S')}
 {status_icon} Price: Free
-{status_icon} By: Mo.dark Checker
+{status_icon} By: yacinedev Checker
 -------------------------------
 {status_icon} Dev: @yacine_X6"""
 
@@ -817,7 +750,6 @@ async def cmd_chk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await status_msg.edit_text(f"{fb('Error')}: <code>{str(e)}</code>", parse_mode="HTML")
 
-
 async def cmd_mass(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     udata = get_user(user_id)
@@ -827,25 +759,18 @@ async def cmd_mass(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = " ".join(context.args).split("\n")
     await process_mass(update, context, lines, user_id, udata)
 
-
 async def process_mass(update: Update, context: ContextTypes.DEFAULT_TYPE, lines: list, user_id: int, udata: dict):
     valid_cards = [engine.parse(line) for line in lines if engine.parse(line)]
     if not valid_cards:
         await update.message.reply_text(f"{fb('No valid cards found!')}", parse_mode="HTML")
         return
 
-    is_admin = str(user_id) == str(ADMIN_ID)
-    limit = 50 if not is_admin else 9999
-    if len(valid_cards) > limit:
-        valid_cards = valid_cards[:limit]
-        await update.message.reply_text(f"{fb('Limited by your plan!')}\n{fb('Will check first')} {limit} {fb('cards')}", parse_mode="HTML")
-
     reset_stop()
 
-    # Send initial status message
     status_msg = await update.message.reply_text(
-        f"{fb('Checking')} {len(valid_cards)} {fb('cards...')}",
-        parse_mode="HTML"
+        f"{fb('Checking')} {len(valid_cards)} {fb('cards...')}\n\n{fb('Press Stop button to halt.')}",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(fb("STOP CHECK"), callback_data="mass_stop")]])
     )
 
     results = []
@@ -854,12 +779,12 @@ async def process_mass(update: Update, context: ContextTypes.DEFAULT_TYPE, lines
     for idx, card in enumerate(valid_cards, 1):
         if is_stopped():
             results.append(f"STOPPED at card {idx}")
+            await update.message.reply_text(f"{fb('Mass check stopped by user.')}", parse_mode="HTML")
             break
         try:
             card_str, success, msg, charged = engine.check(card)
             udata["checks"] += 1
 
-            # Get BIN info
             bin_info = bin_lookup(card['number'])
             bin_scheme = bin_info['scheme'] if bin_info else "Unknown"
             bin_type = bin_info['type'] if bin_info else "Unknown"
@@ -869,12 +794,12 @@ async def process_mass(update: Update, context: ContextTypes.DEFAULT_TYPE, lines
             bin_emoji = bin_info['emoji'] if bin_info else ""
 
             if success:
-                charged_count += 1; udata["charged"] += 1
+                charged_count += 1
+                udata["charged"] += 1
                 status_icon = "[+]"
                 status_text = "CHARGED!"
                 response_text = "APPROVED"
 
-                # Send result for each charged card immediately
                 result_output = f"""{status_icon} Gateway: Stripe Payment Link [ /chk ]
 -------------------------------
 {status_icon} Card: <code>{card_str}</code>
@@ -887,13 +812,14 @@ async def process_mass(update: Update, context: ContextTypes.DEFAULT_TYPE, lines
 -------------------------------
 {status_icon} Time: {datetime.now().strftime('%H:%M:%S')}
 {status_icon} Price: Free
-{status_icon} By: Mo.dark Checker
+{status_icon} By: yacinedev Checker
 -------------------------------
 {status_icon} Dev: @yacine_X6"""
                 await update.message.reply_text(result_output, parse_mode="HTML")
 
             elif "3DS" in msg:
-                _3ds_count += 1; udata["_3ds"] += 1
+                _3ds_count += 1
+                udata["_3ds"] += 1
                 status_icon = "[~]"
                 status_text = "3DS Required"
                 response_text = "3DS OTP"
@@ -910,13 +836,14 @@ async def process_mass(update: Update, context: ContextTypes.DEFAULT_TYPE, lines
 -------------------------------
 {status_icon} Time: {datetime.now().strftime('%H:%M:%S')}
 {status_icon} Price: Free
-{status_icon} By: Mo.dark Checker
+{status_icon} By: yacinedev Checker
 -------------------------------
 {status_icon} Dev: @yacine_X6"""
                 await update.message.reply_text(result_output, parse_mode="HTML")
 
             else:
-                declined_count += 1; udata["declined"] += 1
+                declined_count += 1
+                udata["declined"] += 1
                 status_icon = "[-]"
                 status_text = "DECLINED"
                 response_text = msg
@@ -933,29 +860,29 @@ async def process_mass(update: Update, context: ContextTypes.DEFAULT_TYPE, lines
 -------------------------------
 {status_icon} Time: {datetime.now().strftime('%H:%M:%S')}
 {status_icon} Price: Free
-{status_icon} By: Mo.dark Checker
+{status_icon} By: yacinedev Checker
 -------------------------------
 {status_icon} Dev: @yacine_X6"""
                 await update.message.reply_text(result_output, parse_mode="HTML")
 
             results.append(f"{card_str} -> {status_text}")
 
-            # Update progress
             if idx % 5 == 0 or idx == len(valid_cards):
                 progress = (idx / len(valid_cards)) * 100
                 try:
                     await status_msg.edit_text(
                         f"{fb('Checking...')} {progress:.0f}%\n"
                         f"{idx}/{len(valid_cards)}\n"
-                        f"{fb('Approved')}: {charged_count} | {fb('Declined')}: {declined_count} | {fb('3DS')}: {_3ds_count}",
-                        parse_mode="HTML"
+                        f"{fb('Approved')}: {charged_count} | {fb('Declined')}: {declined_count} | {fb('3DS')}: {_3ds_count}\n\n"
+                        f"{fb('Press Stop button to halt.')}",
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(fb("STOP CHECK"), callback_data="mass_stop")]])
                     )
                 except: pass
                 await asyncio.sleep(0.3)
         except Exception as e:
             results.append(f"[-] {card['number']}|... -> ERROR")
 
-    # Final summary with colored buttons
     result_text = "\n".join(results)
     result_file = BytesIO(result_text.encode("utf-8"))
     result_file.name = f"results_{datetime.now().strftime('%H%M%S')}.txt"
@@ -981,7 +908,6 @@ async def process_mass(update: Update, context: ContextTypes.DEFAULT_TYPE, lines
         parse_mode="HTML"
     )
 
-
 async def cmd_bin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(f"{fb('Usage')}: <code>/bin 424242</code>", parse_mode="HTML")
@@ -1002,9 +928,8 @@ async def cmd_bin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 {fb('Bank')}: <b>{info['bank']}</b>
 ━━━━━━━━━━━━━━"""
     else:
-        text = f"{fb('Could not fetch BIN info. Try again later.')}"""
+        text = f"{fb('Could not fetch BIN info. Try again later.')}"
     await status_msg.edit_text(text, parse_mode="HTML")
-
 
 async def cmd_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) < 1:
@@ -1033,7 +958,6 @@ async def cmd_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
-
 async def cmd_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if str(user_id) != str(ADMIN_ID):
@@ -1045,7 +969,6 @@ async def cmd_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name, url = context.args[0], context.args[1]
     add_gateway(name, url)
     await update.message.reply_text(f"{fb('Gateway added')}: <b>{name}</b>\n<code>{url}</code>", parse_mode="HTML")
-
 
 async def cmd_rm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -1061,7 +984,6 @@ async def cmd_rm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"{fb('Cannot remove default or not found.')}", parse_mode="HTML")
 
-
 async def cmd_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     gw_list = "\n".join([f"├─ <b>{v['name']}</b> ➜ {v['url']}" for v in gateways.values()])
     text = f"""{fb('Gateway Info')}
@@ -1070,7 +992,6 @@ async def cmd_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 └─
 ━━━━━━━━━━━━━━"""
     await update.message.reply_text(text, parse_mode="HTML")
-
 
 async def cmd_redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -1084,11 +1005,9 @@ async def cmd_redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(f"{fb('Invalid or used key!')}", parse_mode="HTML")
 
-
 async def cmd_stopcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stop_all_checks()
     await update.message.reply_text(f"{fb('Stop signal sent. Checks will halt.')}", parse_mode="HTML")
-
 
 async def cmd_sendhit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -1104,7 +1023,6 @@ async def cmd_sendhit(update: Update, context: ContextTypes.DEFAULT_TYPE):
 └─
 ━━━━━━━━━━━━━━"""
     await update.message.reply_text(text, parse_mode="HTML")
-
 
 async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -1123,7 +1041,6 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ━━━━━━━━━━━━━━"""
     await update.message.reply_text(text, parse_mode="HTML")
 
-
 async def cmd_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if str(user_id) != str(ADMIN_ID): return
@@ -1139,11 +1056,6 @@ async def cmd_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except: failed += 1
     await update.message.reply_text(f"{fb('Sent')}: {sent}\n{fb('Failed')}: {failed}", parse_mode="HTML")
 
-
-# ════════════════════════════════════════════════════════════
-# HANDLERS
-# ════════════════════════════════════════════════════════════
-
 async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("state", "")
     user_id = update.effective_user.id
@@ -1156,13 +1068,8 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_bytes = await file.download_as_bytearray()
     content = file_bytes.decode("utf-8", errors="ignore")
     lines = [line.strip() for line in content.split("\n") if line.strip()]
-    is_admin = str(user_id) == str(ADMIN_ID)
-    if not is_admin and len(lines) > 50:
-        await update.message.reply_text(f"{fb('Limited to 50 cards. File truncated.')}", parse_mode="HTML")
-        lines = lines[:50]
     await process_mass(update, context, lines, user_id, udata)
     context.user_data["state"] = ""
-
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("state", "")
@@ -1177,21 +1084,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.args = text.split()
         await cmd_chk(update, context)
     else:
-        await update.message.reply_text(f"{fb('Mo.dark Card Checker')}\n\n{fb('Use the menu or commands:')}", reply_markup=InlineKeyboardMarkup([
+        await update.message.reply_text(f"{fb('yacinedev Card Checker')}\n\n{fb('Use the menu or commands:')}", reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(fb("Tools"), callback_data="tools")],
             [InlineKeyboardButton(fb("Profile"), callback_data="profile")],
             [InlineKeyboardButton(fb("Settings"), callback_data="settings")],
             [InlineKeyboardButton(fb("About"), callback_data="about")],
         ]), parse_mode="HTML")
 
-
-# ════════════════════════════════════════════════════════════
-# MAIN
-# ════════════════════════════════════════════════════════════
-
 def main():
-    print(f"""
-Mo.dark Card Checker Bot v7.0
+    print("""
+yacinedev Card Checker Bot v7.0
 Engine: Stripe Payment Link
 Font: Feedback
 Language: English
@@ -1230,7 +1132,6 @@ Colored Buttons: Active (via requests API)
         print("[*] Restarting in 5 seconds...")
         time.sleep(5)
         main()
-
 
 if __name__ == "__main__":
     while True:
